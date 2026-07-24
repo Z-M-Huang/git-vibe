@@ -56,6 +56,9 @@ type StageSafetyOptions = Omit<
   Parameters<typeof blockUnsafePromptInjection>[0],
   "extraSources" | "phase" | "result"
 >;
+type StageAiPreparation =
+  | { aiRunOptions: RunAiStageOptions; status: "ready" }
+  | { result: StageRunResult; status: "blocked" };
 
 export interface StageSecurityReviewResult {
   allowed: boolean;
@@ -136,57 +139,79 @@ export async function runStage(options: RunnerOptions): Promise<StageRunResult> 
   });
   if (inputSafetyResult) return inputSafetyResult;
 
-  const mcpContext = await resolveMcpContext({ ...stageContext, config, context: promptContext });
-  if (mcpContext.blockedResult) return finishStage(logger, mcpContext.blockedResult);
-
-  const schema = loadStageSchema(definition.schemaFile);
-  const contextFiles = persistContext({
+  const prepared = await prepareStageAi({
+    client,
+    config,
     context: promptContext,
+    definition,
+    executionMode,
     ignoredAuthors,
     logger,
     options,
-  });
-  const prompts = buildRenderedPrompts({
-    context: promptContext,
-    contextFiles,
-    definition,
-    options,
-    schema,
-  });
-  if (mcpContext.promptAddition) {
-    prompts.prompt = `${prompts.prompt}\n\n${mcpContext.promptAddition}`;
-  }
-  logger.event("prompt.ready", {
-    schema_id: definition.schemaId,
-    tools: definition.tools.join(","),
-  });
-
-  const aiRunOptions = buildAiRunOptions({
-    client,
-    config,
-    contextFiles,
-    definition,
-    logger,
-    options,
-    prompts,
-    schema,
-  });
-  const promptSafetyResult = await blockMcpPromptInput({
-    promptAddition: mcpContext.promptAddition,
     safetyOptions,
+    transientComments,
   });
-  if (promptSafetyResult) return promptSafetyResult;
+  if (prepared.status === "blocked") return finishStage(logger, prepared.result);
 
   const result = await runCheckedStageResult({
     ...stageContext,
     acceptedRisk,
-    aiRunOptions,
+    aiRunOptions: prepared.aiRunOptions,
     config,
     executionMode,
     safetyOptions,
   });
   await publishAcceptedRiskAuditForLabeledContext({ ...safetyOptions, acceptedRisk, result });
   return finishStage(logger, result);
+}
+
+async function prepareStageAi(options: {
+  client: GitHubClient;
+  config: GitVibeConfig;
+  context: ContextPacket;
+  definition: RunnerStageDefinition;
+  executionMode: RunnerOptions["executionMode"];
+  ignoredAuthors: readonly string[];
+  logger: StageLogger;
+  options: RunnerOptions;
+  safetyOptions: StageSafetyOptions;
+  transientComments: PublishedArtifactComment[];
+}): Promise<StageAiPreparation> {
+  const schema = loadStageSchema(options.definition.schemaFile);
+  if (options.executionMode === "finalizer") {
+    options.logger.event("prompt.ready", {
+      schema_id: options.definition.schemaId,
+      tools: "",
+    });
+    return {
+      aiRunOptions: buildFinalizerAiRunOptions({ ...options, schema }),
+      status: "ready",
+    };
+  }
+
+  const mcpContext = await resolveMcpContext(options);
+  if (mcpContext.blockedResult) {
+    return { result: mcpContext.blockedResult, status: "blocked" };
+  }
+  const contextFiles = persistContext(options);
+  const prompts = buildRenderedPrompts({ ...options, contextFiles, schema });
+  if (mcpContext.promptAddition) {
+    prompts.prompt = `${prompts.prompt}\n\n${mcpContext.promptAddition}`;
+  }
+  options.logger.event("prompt.ready", {
+    schema_id: options.definition.schemaId,
+    tools: options.definition.tools.join(","),
+  });
+
+  const promptSafetyResult = await blockMcpPromptInput({
+    promptAddition: mcpContext.promptAddition,
+    safetyOptions: options.safetyOptions,
+  });
+  if (promptSafetyResult) return { result: promptSafetyResult, status: "blocked" };
+  return {
+    aiRunOptions: buildAiRunOptions({ ...options, contextFiles, prompts, schema }),
+    status: "ready",
+  };
 }
 
 async function blockInitialPromptInput(options: {
@@ -253,13 +278,19 @@ async function runCheckedStageResult(options: {
   transientComments: PublishedArtifactComment[];
 }): Promise<StageRunResult> {
   const result = await runStageResultForMode(options);
-  recordContextCoverage({
-    coverage: contextPromptCoverageForContext(options.context, {
-      budgetChars: Number.MAX_SAFE_INTEGER,
-      ignoredAuthors: safetyIgnoredAuthors(options.config),
-    }),
-    logger: options.logger,
-  });
+  if (options.executionMode === "finalizer") {
+    options.logger.event("context.coverage.skip", {
+      reason: "matrix-finalizer-member-results-only",
+    });
+  } else {
+    recordContextCoverage({
+      coverage: contextPromptCoverageForContext(options.context, {
+        budgetChars: Number.MAX_SAFE_INTEGER,
+        ignoredAuthors: safetyIgnoredAuthors(options.config),
+      }),
+      logger: options.logger,
+    });
+  }
   if (options.executionMode === "member") return result;
 
   const outputSafetyResult = await blockUnsafePromptInjection({
@@ -406,6 +437,28 @@ function buildAiRunOptions(options: {
     stage: options.options.stage,
     stageDefinition: options.definition,
     system: options.prompts.system,
+  };
+}
+
+function buildFinalizerAiRunOptions(options: {
+  config: GitVibeConfig;
+  definition: RunnerStageDefinition;
+  logger: StageLogger;
+  options: RunnerOptions;
+  schema: JsonObject;
+}): RunAiStageOptions {
+  return {
+    config: options.config,
+    cwd: options.options.cwd,
+    logger: options.logger,
+    maxTurns: options.options.maxTurns,
+    profileName: options.options.profileName,
+    prompt: "",
+    schema: options.schema,
+    schemaId: options.definition.schemaId,
+    stage: options.options.stage,
+    stageDefinition: options.definition,
+    system: "",
   };
 }
 

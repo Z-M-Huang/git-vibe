@@ -39,7 +39,6 @@ export interface RoleGroupSynthesisMember {
   index: number;
   profile: string;
   role: string;
-  roleDefinition: string;
 }
 
 const roleGroupStages = new Set<Stage>(["investigate", "review-matrix", "validate"]);
@@ -183,16 +182,12 @@ export function readRoleDefinition(cwd: string, role: string): string {
   return content;
 }
 
-export function roleGroupSynthesisMembers(
-  cwd: string,
-  plan: StageExecutionPlan,
-): RoleGroupSynthesisMember[] {
+export function roleGroupSynthesisMembers(plan: StageExecutionPlan): RoleGroupSynthesisMember[] {
   return plan.matrix.include.map((member) => ({
     artifact: member.artifact,
     index: member.index,
     profile: member.profile,
     role: member.role,
-    roleDefinition: member.role ? readRoleDefinition(cwd, member.role) : "",
   }));
 }
 
@@ -242,7 +237,6 @@ ${JSON.stringify(
       index: member.index,
       profile: member.profile,
       role: member.role,
-      role_definition: member.roleDefinition,
     })),
     results: options.results.map((result) => ({
       output: result.parsedOutput,
@@ -261,16 +255,15 @@ ${JSON.stringify(
 </role_group_results>`;
 }
 
-export function synthesizerSystemAddition(): string {
+export function synthesizerSystemPrompt(): string {
   return [
     "<role_group_synthesizer>",
-    "You are synthesizing multiple GitVibe role results into one final stage result.",
-    "Use configured role definitions to understand each member's review lens and expected coverage.",
-    "Inspect the repository and GitHub context when member outputs disagree, omit important concepts, or need evidence.",
-    "Return the existing stage schema only. Do not return arrays of reviewer results.",
-    "You may add your own findings only when they are grounded in inspected repository, diff, or GitHub evidence.",
-    "Discard false positives, duplicate findings, obsolete findings, and over-engineered suggestions.",
+    "You combine multiple GitVibe role results into one final stage result.",
+    "Build every output field from the member results.",
+    "Preserve every distinct member finding.",
+    "Merge findings only when they describe the same underlying issue, combining their evidence, references, tests, severity, and inline comment details.",
     "Mention role success and failure counts in summary or comment_body when any role result is missing.",
+    "Return one JSON object matching the existing stage schema.",
     "</role_group_synthesizer>",
   ].join("\n");
 }

@@ -9,7 +9,7 @@ import {
   roleGroupSynthesisMembers,
   stageExecutionPlan,
   synthesisPromptAddition,
-  synthesizerSystemAddition,
+  synthesizerSystemPrompt,
 } from "./role-groups.js";
 import type { StageLogger } from "./logging.js";
 import { stageDefinitions } from "../shared/stages.js";
@@ -103,7 +103,7 @@ async function runMatrixFinalizerResult({
     });
   }
 
-  const members = roleGroupSynthesisMembers(options.cwd, plan);
+  const members = roleGroupSynthesisMembers(plan);
   const buildResult = stageResultBuilder({ context, definition, logger, options });
   const sanitizedResults = sanitizedMatrixMemberResults(results);
   const finalizerSafetySources = matrixFinalizerSafetySources({ results: sanitizedResults });
@@ -119,23 +119,22 @@ async function runMatrixFinalizerResult({
   });
   if (blocked) return blocked;
 
-  const prompt = [
-    aiRunOptions.prompt,
-    synthesisPromptAddition({
-      expected,
-      failed,
-      members,
-      results: sanitizedResults,
-      roleGroup: plan.roleGroup,
-      stage: options.stage,
-    }),
-  ].join("\n\n");
+  const prompt = synthesisPromptAddition({
+    expected,
+    failed,
+    members,
+    results: sanitizedResults,
+    roleGroup: plan.roleGroup,
+    stage: options.stage,
+  });
   return stageRunResult({
     content: await runAiStage({
       ...aiRunOptions,
+      contextFilesRoot: undefined,
       profileName: plan.synthesizerProfile,
       prompt,
-      system: [aiRunOptions.system, synthesizerSystemAddition()].join("\n\n"),
+      system: synthesizerSystemPrompt(),
+      toolOverride: [],
     }),
     context,
     definition,

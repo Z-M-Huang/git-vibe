@@ -20,7 +20,7 @@ import {
   stageWorkflowLabels,
   stageWorkflowMatrix,
   synthesisPromptAddition,
-  synthesizerSystemAddition,
+  synthesizerSystemPrompt,
 } from "../src/runner/role-groups.ts";
 
 describe("role group stage planning", () => {
@@ -313,7 +313,16 @@ describe("role group result loading", () => {
         result: { schemaId: "review-matrix.v1", status: "completed", summary: "Done." },
       }),
     ).toMatchObject({ profile: "", role: "" });
-    expect(synthesizerSystemAddition()).toContain("<role_group_synthesizer>");
+    const synthesizerSystem = synthesizerSystemPrompt();
+    expect(synthesizerSystem).toContain("<role_group_synthesizer>");
+    expect(synthesizerSystem).toContain("Build every output field from the member results.");
+    expect(synthesizerSystem).toContain("Preserve every distinct member finding.");
+    expect(synthesizerSystem).toContain(
+      "Merge findings only when they describe the same underlying issue",
+    );
+    expect(synthesizerSystem).not.toContain("Inspect the repository");
+    expect(synthesizerSystem).not.toContain("add your own findings");
+    expect(synthesizerSystem).not.toContain("Discard false positives");
 
     cleanupWorkspace(cwd);
   });
@@ -328,7 +337,6 @@ describe("role group result loading", () => {
           index: 0,
           profile: "reviewer",
           role: "security.md",
-          roleDefinition: "Focus on token boundaries.",
         },
       ],
       results: [
@@ -350,7 +358,7 @@ describe("role group result loading", () => {
     expect(prompt).toContain('"successful_results": 1');
     expect(prompt).toContain('"failed_results": 1');
     expect(prompt).toContain('"configured_members"');
-    expect(prompt).toContain('"role_definition": "Focus on token boundaries."');
+    expect(prompt).not.toContain("role_definition");
     expect(prompt).toContain("security.md");
   });
 });

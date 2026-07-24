@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("matrix finalizer safety sources", () => {
-  it("safety-scans member outputs without scanning trusted role definitions", async () => {
+  it("safety-scans member outputs while synthesis omits role definitions and stage context", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "git-vibe-finalizer-safety-"));
     const resultsDir = join(cwd, "member-results");
     const roleDefinition = [
@@ -76,8 +76,10 @@ describe("matrix finalizer safety sources", () => {
     );
     expect(JSON.stringify(safetyPrompt)).not.toContain(roleDefinition);
 
-    expect(calls[1].input).toContain('"role_definition"');
-    expect(calls[1].input).toContain("Review the change for markhuang.ai");
+    expect(calls[1].input).not.toContain("role_definition");
+    expect(calls[1].input).not.toContain("Review the change for markhuang.ai");
+    expect(calls[1].input).not.toContain("base prompt");
+    expect(calls[1].input).not.toContain("system prompt");
   });
 });
 
@@ -155,6 +157,49 @@ describe("matrix finalizer safety source sanitization", () => {
   });
 });
 
+describe("matrix finalizer synthesis boundary", () => {
+  it("runs Claude synthesis without stage context files or tools", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "git-vibe-finalizer-boundary-"));
+    const resultsDir = join(cwd, "member-results");
+    writeRole(cwd, "security.md", "Review the change for security regressions.");
+    mkdirSync(resultsDir);
+    writeFileSync(join(resultsDir, "git-vibe-validate-result.json"), memberResult());
+    const config = claudeRoleGroupConfig();
+    const definition = stageDefinitions.validate;
+    globalThis.__gitVibeSdkMocks.queueClaudeOutput(synthesizedOutput());
+
+    await runStageResultForMode({
+      acceptedRisk: false,
+      aiRunOptions: {
+        config,
+        contextFilesRoot: join(cwd, "context-files"),
+        cwd,
+        maxTurns: 2,
+        prompt: "base prompt",
+        schema: loadStageSchema(definition.schemaFile),
+        schemaId: definition.schemaId,
+        stage: "validate",
+        stageDefinition: definition,
+        system: "system prompt",
+      },
+      config,
+      context: contextPacket(),
+      definition,
+      executionMode: "finalizer",
+      logger: { event: vi.fn() },
+      options: runnerOptions(cwd, resultsDir),
+    });
+
+    const request = globalThis.__gitVibeSdkMocks.claudeQuery.mock.calls[0][0];
+    expect(request.prompt).toContain("<role_group_results>");
+    expect(request.prompt).not.toContain("base prompt");
+    expect(request.options.systemPrompt).not.toContain("system prompt");
+    expect(request.options.tools).toEqual([]);
+    expect(request.options.allowedTools).toEqual([]);
+    expect(request.options).not.toHaveProperty("additionalDirectories");
+  });
+});
+
 function roleGroupConfig() {
   return {
     ai: {
@@ -180,6 +225,37 @@ function roleGroupConfig() {
     },
     safety: {
       prompt_injection_gate: true,
+    },
+  };
+}
+
+function claudeRoleGroupConfig() {
+  return {
+    ai: {
+      profiles: {
+        test: {
+          adapter: "claude-code-sdk",
+          env: {
+            ANTHROPIC_API_KEY: { from_bundle: "GITVIBE_AI_API_KEY" },
+            ANTHROPIC_BASE_URL: { from_bundle: "CODEX_BASE_URL" },
+          },
+          model: "opus",
+        },
+      },
+      role_groups: {
+        review_gate: {
+          roles: [{ profile: "test", role: "security.md" }],
+          synthesizer: "test",
+        },
+      },
+      stages: {
+        validate: {
+          role_group: "review_gate",
+        },
+      },
+    },
+    safety: {
+      prompt_injection_gate: false,
     },
   };
 }

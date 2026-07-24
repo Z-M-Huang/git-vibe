@@ -58663,13 +58663,12 @@ function readRoleDefinition(cwd, role) {
   if (!content) throw new Error(`Role definition must not be empty: ${role}`);
   return content;
 }
-function roleGroupSynthesisMembers(cwd, plan) {
+function roleGroupSynthesisMembers(plan) {
   return plan.matrix.include.map((member) => ({
     artifact: member.artifact,
     index: member.index,
     profile: member.profile,
-    role: member.role,
-    roleDefinition: member.role ? readRoleDefinition(cwd, member.role) : ""
+    role: member.role
   }));
 }
 function loadMatrixStageResults(directory, stage) {
@@ -58699,8 +58698,7 @@ ${JSON.stringify(
         artifact: member.artifact,
         index: member.index,
         profile: member.profile,
-        role: member.role,
-        role_definition: member.roleDefinition
+        role: member.role
       })),
       results: options.results.map((result) => ({
         output: result.parsedOutput,
@@ -58718,16 +58716,15 @@ ${JSON.stringify(
   )}
 </role_group_results>`;
 }
-function synthesizerSystemAddition() {
+function synthesizerSystemPrompt() {
   return [
     "<role_group_synthesizer>",
-    "You are synthesizing multiple GitVibe role results into one final stage result.",
-    "Use configured role definitions to understand each member's review lens and expected coverage.",
-    "Inspect the repository and GitHub context when member outputs disagree, omit important concepts, or need evidence.",
-    "Return the existing stage schema only. Do not return arrays of reviewer results.",
-    "You may add your own findings only when they are grounded in inspected repository, diff, or GitHub evidence.",
-    "Discard false positives, duplicate findings, obsolete findings, and over-engineered suggestions.",
+    "You combine multiple GitVibe role results into one final stage result.",
+    "Build every output field from the member results.",
+    "Preserve every distinct member finding.",
+    "Merge findings only when they describe the same underlying issue, combining their evidence, references, tests, severity, and inline comment details.",
     "Mention role success and failure counts in summary or comment_body when any role result is missing.",
+    "Return one JSON object matching the existing stage schema.",
     "</role_group_synthesizer>"
   ].join("\n");
 }
@@ -60912,7 +60909,7 @@ async function runMatrixFinalizerResult({
       options
     });
   }
-  const members = roleGroupSynthesisMembers(options.cwd, plan);
+  const members = roleGroupSynthesisMembers(plan);
   const buildResult = stageResultBuilder({ context, definition, logger, options });
   const sanitizedResults = sanitizedMatrixMemberResults(results);
   const finalizerSafetySources = matrixFinalizerSafetySources({ results: sanitizedResults });
@@ -60927,23 +60924,22 @@ async function runMatrixFinalizerResult({
     runner: options
   });
   if (blocked) return blocked;
-  const prompt = [
-    aiRunOptions.prompt,
-    synthesisPromptAddition({
-      expected,
-      failed,
-      members,
-      results: sanitizedResults,
-      roleGroup: plan.roleGroup,
-      stage: options.stage
-    })
-  ].join("\n\n");
+  const prompt = synthesisPromptAddition({
+    expected,
+    failed,
+    members,
+    results: sanitizedResults,
+    roleGroup: plan.roleGroup,
+    stage: options.stage
+  });
   return stageRunResult({
     content: await runAiStage({
       ...aiRunOptions,
+      contextFilesRoot: void 0,
       profileName: plan.synthesizerProfile,
       prompt,
-      system: [aiRunOptions.system, synthesizerSystemAddition()].join("\n\n")
+      system: synthesizerSystemPrompt(),
+      toolOverride: []
     }),
     context,
     definition,
@@ -61649,56 +61645,66 @@ async function runStage(options) {
     safetyOptions
   });
   if (inputSafetyResult) return inputSafetyResult;
-  const mcpContext = await resolveMcpContext({ ...stageContext, config: config2, context: promptContext });
-  if (mcpContext.blockedResult) return finishStage(logger, mcpContext.blockedResult);
-  const schema = loadStageSchema(definition.schemaFile);
-  const contextFiles = persistContext({
-    context: promptContext,
-    ignoredAuthors,
-    logger,
-    options
-  });
-  const prompts = buildRenderedPrompts({
-    context: promptContext,
-    contextFiles,
-    definition,
-    options,
-    schema
-  });
-  if (mcpContext.promptAddition) {
-    prompts.prompt = `${prompts.prompt}
-
-${mcpContext.promptAddition}`;
-  }
-  logger.event("prompt.ready", {
-    schema_id: definition.schemaId,
-    tools: definition.tools.join(",")
-  });
-  const aiRunOptions = buildAiRunOptions({
+  const prepared = await prepareStageAi({
     client,
     config: config2,
-    contextFiles,
+    context: promptContext,
     definition,
+    executionMode,
+    ignoredAuthors,
     logger,
     options,
-    prompts,
-    schema
+    safetyOptions,
+    transientComments
   });
-  const promptSafetyResult = await blockMcpPromptInput({
-    promptAddition: mcpContext.promptAddition,
-    safetyOptions
-  });
-  if (promptSafetyResult) return promptSafetyResult;
+  if (prepared.status === "blocked") return finishStage(logger, prepared.result);
   const result = await runCheckedStageResult({
     ...stageContext,
     acceptedRisk,
-    aiRunOptions,
+    aiRunOptions: prepared.aiRunOptions,
     config: config2,
     executionMode,
     safetyOptions
   });
   await publishAcceptedRiskAuditForLabeledContext({ ...safetyOptions, acceptedRisk, result });
   return finishStage(logger, result);
+}
+async function prepareStageAi(options) {
+  const schema = loadStageSchema(options.definition.schemaFile);
+  if (options.executionMode === "finalizer") {
+    options.logger.event("prompt.ready", {
+      schema_id: options.definition.schemaId,
+      tools: ""
+    });
+    return {
+      aiRunOptions: buildFinalizerAiRunOptions({ ...options, schema }),
+      status: "ready"
+    };
+  }
+  const mcpContext = await resolveMcpContext(options);
+  if (mcpContext.blockedResult) {
+    return { result: mcpContext.blockedResult, status: "blocked" };
+  }
+  const contextFiles = persistContext(options);
+  const prompts = buildRenderedPrompts({ ...options, contextFiles, schema });
+  if (mcpContext.promptAddition) {
+    prompts.prompt = `${prompts.prompt}
+
+${mcpContext.promptAddition}`;
+  }
+  options.logger.event("prompt.ready", {
+    schema_id: options.definition.schemaId,
+    tools: options.definition.tools.join(",")
+  });
+  const promptSafetyResult = await blockMcpPromptInput({
+    promptAddition: mcpContext.promptAddition,
+    safetyOptions: options.safetyOptions
+  });
+  if (promptSafetyResult) return { result: promptSafetyResult, status: "blocked" };
+  return {
+    aiRunOptions: buildAiRunOptions({ ...options, contextFiles, prompts, schema }),
+    status: "ready"
+  };
 }
 async function blockInitialPromptInput(options) {
   if (options.acceptedRisk) return blockAcceptedRiskDeltaInput(options.safetyOptions);
@@ -61740,13 +61746,19 @@ function blockMcpPromptInput(options) {
 var mcpPromptSafetySources = (promptAddition) => promptAddition ? [{ label: "rendered MCP context prompt addition", text: promptAddition }] : [];
 async function runCheckedStageResult(options) {
   const result = await runStageResultForMode(options);
-  recordContextCoverage({
-    coverage: contextPromptCoverageForContext(options.context, {
-      budgetChars: Number.MAX_SAFE_INTEGER,
-      ignoredAuthors: safetyIgnoredAuthors(options.config)
-    }),
-    logger: options.logger
-  });
+  if (options.executionMode === "finalizer") {
+    options.logger.event("context.coverage.skip", {
+      reason: "matrix-finalizer-member-results-only"
+    });
+  } else {
+    recordContextCoverage({
+      coverage: contextPromptCoverageForContext(options.context, {
+        budgetChars: Number.MAX_SAFE_INTEGER,
+        ignoredAuthors: safetyIgnoredAuthors(options.config)
+      }),
+      logger: options.logger
+    });
+  }
   if (options.executionMode === "member") return result;
   const outputSafetyResult = await blockUnsafePromptInjection({
     ...options.safetyOptions,
@@ -61832,6 +61844,21 @@ function buildAiRunOptions(options) {
     stage: options.options.stage,
     stageDefinition: options.definition,
     system: options.prompts.system
+  };
+}
+function buildFinalizerAiRunOptions(options) {
+  return {
+    config: options.config,
+    cwd: options.options.cwd,
+    logger: options.logger,
+    maxTurns: options.options.maxTurns,
+    profileName: options.options.profileName,
+    prompt: "",
+    schema: options.schema,
+    schemaId: options.definition.schemaId,
+    stage: options.options.stage,
+    stageDefinition: options.definition,
+    system: ""
   };
 }
 async function loadRunnerContext(options) {
