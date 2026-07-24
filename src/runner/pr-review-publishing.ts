@@ -463,11 +463,6 @@ function reviewFindingComment(value: unknown, index: number): ReviewFindingComme
   const reviewComment: PullRequestReviewComment = { body, line, path, side };
   const startLine = integerField(value.start_line);
   if (startLine !== undefined) {
-    if (startLine > line) {
-      throw new Error(
-        `review-matrix inline_comments[${index}].start_line must be less than or equal to line.`,
-      );
-    }
     reviewComment.start_line = startLine;
     reviewComment.start_side = side;
   }

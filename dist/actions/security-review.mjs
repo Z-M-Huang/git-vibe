@@ -54938,6 +54938,7 @@ function isReviewLine(index, comment) {
 }
 function isReviewRange(index, comment) {
   if (comment.start_line === void 0) return true;
+  if (comment.start_line > comment.line) return false;
   const hunks = sideHunks(index, comment);
   const startHunk = hunks?.get(comment.start_line);
   return startHunk !== void 0 && startHunk === hunks?.get(comment.line);
@@ -55304,11 +55305,6 @@ function reviewFindingComment(value, index) {
   const reviewComment = { body, line, path: path3, side };
   const startLine = integerField(value.start_line);
   if (startLine !== void 0) {
-    if (startLine > line) {
-      throw new Error(
-        `review-matrix inline_comments[${index}].start_line must be less than or equal to line.`
-      );
-    }
     reviewComment.start_line = startLine;
     reviewComment.start_side = side;
   }

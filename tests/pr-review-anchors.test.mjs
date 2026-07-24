@@ -71,6 +71,53 @@ describe("pull request review anchor validation ranges", () => {
   });
 });
 
+describe("pull request review anchor validation reversed ranges", () => {
+  it("downgrades reversed ranges before creating the review", async () => {
+    const client = createClient({
+      files: [
+        {
+          filename: "src/app.ts",
+          patch: "@@ -0,0 +155,2 @@\n+line 155\n+line 156",
+        },
+      ],
+    });
+    const logger = createLogger();
+
+    await publishPullRequestReviewResult({
+      client,
+      context: context(),
+      logger,
+      parsedOutput: {
+        ...output(),
+        inline_comments: [
+          {
+            body: "Reversed range.",
+            line: 155,
+            path: "src/app.ts",
+            start_line: 156,
+          },
+        ],
+        next_state: "changes-required",
+        stage: "review-matrix",
+      },
+      runner: runner(),
+      stageResultBody: "Review summary.",
+    });
+
+    expect(reviewRequest(client).body.comments).toEqual([
+      expect.objectContaining({ line: 155, path: "src/app.ts", side: "RIGHT" }),
+    ]);
+    expect(reviewRequest(client).body.comments?.[0]).not.toHaveProperty("start_line");
+    expect(reviewRequest(client).body.comments?.[0]).not.toHaveProperty("start_side");
+    expect(logger.event).toHaveBeenCalledWith("github.pr.review.anchors.checked", {
+      comments: 1,
+      downgraded: 1,
+      posted: 1,
+      unanchored: 0,
+    });
+  });
+});
+
 describe("pull request review anchor validation unanchored lines", () => {
   it("keeps left-side comments on deleted lines", async () => {
     const client = createClient({

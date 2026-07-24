@@ -487,10 +487,6 @@ describe("pull request review publishing validation", () => {
       [[null], "review-matrix inline_comments[0] must be an object."],
       [[{ body: "Missing path.", line: 4 }], "must define path, line, and body"],
       [
-        [{ body: "Invalid range.", line: 4, path: "src/app.ts", start_line: 6 }],
-        "start_line must be less than or equal to line",
-      ],
-      [
         [{ body: "Invalid finding ID.", finding_id: "invalid id", line: 4, path: "src/app.ts" }],
         "finding_id must match the allowed pattern",
       ],

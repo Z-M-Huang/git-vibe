@@ -44,5 +44,18 @@ describe("review-matrix contract", () => {
         schemaId: stageDefinitions["review-matrix"].schemaId,
       }),
     ).rejects.toThrow("AI output failed review-matrix.v1 validation");
+
+    expect(schema).toMatchObject({
+      properties: {
+        inline_comments: {
+          items: {
+            properties: {
+              line: { description: expect.stringContaining("final line") },
+              start_line: { description: expect.stringContaining("less than or equal") },
+            },
+          },
+        },
+      },
+    });
   });
 });
