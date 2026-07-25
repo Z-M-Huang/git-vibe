@@ -447,9 +447,15 @@ adapter, model, auth, env, and reasoning settings. They use native structured
 output schema support and do not receive `output_validator` tool-call
 instructions.
 GitHub context bodies, handoffs, and PR patches are persisted as runner-local
-context files. The initial prompt carries manifests and file references so SDK
-agents can read exact evidence with normal repository tools instead of receiving
-large inline prompt payloads.
+context files. The initial prompt carries a compact JSONL index, aggregate counts,
+and file references so SDK agents can search for relevant units and read exact
+evidence with native file tools instead of receiving large inline prompt payloads.
+The detailed manifest and complete serialized context remain on disk for cases
+that require hashes or full metadata.
+Claude Code auto-compaction remains enabled and controlled by the SDK. Custom
+proxy profiles can set `CLAUDE_CODE_AUTO_COMPACT_WINDOW` and
+`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` in their profile `env` when the proxy's actual
+context window differs from the model alias reported to Claude Code.
 Profiles may opt into shared repository guidance with
 `ai.profiles.<name>.context.files`. Listed files are appended to the rendered
 system prompt for that profile. Native SDK adapters may also load their

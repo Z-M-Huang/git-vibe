@@ -15,15 +15,17 @@
 <required_process>
 
 1. Identify the GitHub artifact, requested outcome, and any labels or comments that affect authorization.
-2. Read the `github_context.context_manifest` first. If `github_context.context_files` exists, the exact artifact body, timeline bodies, handoffs, and pull request patches are in the referenced files; use read or grep tools against those paths when evidence is material to the decision.
-3. If `github_context.context_files` is absent, `included_context_chunks` contains the chunk text supplied within the prompt budget and `pending_chunks` are listed by id but not semantically processed.
-4. Do not return `blocked` solely for omitted inline chunks or file-backed context references. Use tools when missing content is material to the decision; otherwise state the context limit in assumptions or findings.
-5. Read or inspect only the context needed for this stage. Use tools when the supplied context metadata is not enough to support the conclusion.
-6. Separate facts, assumptions, questions, and risks. Do not merge them into vague prose.
-7. Decide whether the stage is `completed` or `blocked`. If blocked, explain the blocking condition and do not trigger downstream work through a completed status.
-8. Build the final JSON object with every required field from the schema. Include optional fields only when they are useful and schema-valid.
-9. Return only the final JSON object.
-   </required_process>
+2. Inspect `github_context.context_manifest` first. If `github_context.context_files` exists, search its compact JSONL `index.path` to identify relevant context units before reading their contents.
+3. Each index row's `file` is relative to the directory containing `index.path`. Use read or grep tools with bounded ranges against selected unit files; do not read every unit by default.
+4. The detailed `manifest.path` contains hashes and complete metadata. Read it only when those details are necessary. Do not read the full serialized context by default.
+5. If `github_context.context_files` is absent, `included_context_chunks` contains the chunk text supplied within the prompt budget and `pending_chunks` are listed by id but not semantically processed.
+6. Do not return `blocked` solely for omitted inline chunks or file-backed context references. Use tools when missing content is material to the decision; otherwise state the context limit in assumptions or findings.
+7. Read or inspect only the context needed for this stage. Use tools when the supplied context metadata is not enough to support the conclusion.
+8. Separate facts, assumptions, questions, and risks. Do not merge them into vague prose.
+9. Decide whether the stage is `completed` or `blocked`. If blocked, explain the blocking condition and do not trigger downstream work through a completed status.
+10. Build the final JSON object with every required field from the schema. Include optional fields only when they are useful and schema-valid.
+11. Return only the final JSON object.
+    </required_process>
 
 <status_rules>
 

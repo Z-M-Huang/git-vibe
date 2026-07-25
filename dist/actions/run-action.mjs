@@ -10413,9 +10413,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -10726,9 +10726,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
@@ -10936,9 +10936,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -11079,6 +11079,7 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -11107,6 +11108,11 @@ var require_fast_uri = __commonJS({
         } else {
           uri = "//" + uri;
         }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
       }
       const matches = uri.match(URI_PARSE);
       if (matches) {
@@ -11151,7 +11157,7 @@ var require_fast_uri = __commonJS({
         if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
           if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
             try {
-              parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
+              parsed.host = new URL("http://" + parsed.host).hostname;
             } catch (e) {
               parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
             }
@@ -36863,23 +36869,33 @@ function packedFileBackedContextForPrompt(context, fileContext) {
   return {
     artifact: packedArtifact(context),
     context_files: {
-      full_context: fileContext.full_context,
+      index: fileContext.index,
       manifest: fileContext.manifest,
-      root_dir: fileContext.root_dir,
       units_dir: fileContext.units_dir
     },
     context_manifest: {
       delivery: "file-backed",
+      handoffs: context.handoffs?.length || 0,
+      index_format: "git-vibe.context-index.v1",
+      pull_request_additions: sumPullRequestFileField(context, "additions"),
+      pull_request_deletions: sumPullRequestFileField(context, "deletions"),
+      pull_request_files: context.pullRequestFiles?.length || 0,
+      timeline_items: context.timeline.length,
       total_units: fileContext.units.length,
-      units: fileContext.units.map(fileBackedUnitManifest)
+      units_by_kind: countUnitsByKind(fileContext.units)
     },
     generatedAt: context.generatedAt,
-    handoffs: packedHandoffs(context),
-    pullRequestFiles: packedPullRequestFiles(context),
     repository: context.repository,
-    source: packedSource(context),
-    timeline: context.timeline.map(packedTimelineItem)
+    source: packedSource(context)
   };
+}
+function countUnitsByKind(units) {
+  const counts = {};
+  for (const unitItem of units) counts[unitItem.kind] = (counts[unitItem.kind] || 0) + 1;
+  return counts;
+}
+function sumPullRequestFileField(context, field) {
+  return (context.pullRequestFiles || []).reduce((total, file2) => total + (file2[field] || 0), 0);
 }
 function contextPromptCoverageForContext(context, options = {}) {
   const chunks = chunkContentUnits(contentUnitsForContext(context, options), options);
@@ -36978,6 +36994,8 @@ function timelineUnits(item, index) {
         id: item.id,
         kind: item.kind,
         parentId: item.parentId,
+        reviewThreadId: item.reviewThreadId,
+        reviewThreadIsOutdated: item.reviewThreadIsOutdated,
         updatedAt: bodyTimelineKind(item.kind) ? void 0 : item.updatedAt
       },
       sourceUrl: item.url
@@ -37073,23 +37091,6 @@ function unitManifest(unitItem, chunks, includedIds) {
     pending_chunks: unitChunks.filter((chunk) => !includedIds.has(chunk.id)).length,
     path: unitItem.path,
     sha256: sha256(unitItem.text),
-    sourceUrl: unitItem.sourceUrl
-  };
-}
-function fileBackedUnitManifest(unitItem) {
-  return {
-    chars: unitItem.chars,
-    file: {
-      chars: unitItem.chars,
-      path: unitItem.path,
-      relative_path: unitItem.relative_path,
-      sha256: unitItem.sha256
-    },
-    id: unitItem.id,
-    kind: unitItem.kind,
-    label: unitItem.label,
-    metadata: unitItem.metadata,
-    path: unitItem.path_in_repository,
     sourceUrl: unitItem.sourceUrl
   };
 }
@@ -37273,8 +37274,8 @@ function writePromptContextFiles(options) {
     path: join3(rootDir, "github-context.json"),
     rootDir
   });
-  const units = contentUnitsForContext(context).map((unit2, index) => {
-    const path3 = join3(unitsDir, unitFilename(unit2.id, index));
+  const units = contentUnitsForContext(context).map((unit2, index2) => {
+    const path3 = join3(unitsDir, unitFilename(unit2.id, index2));
     writeFileSync2(path3, unit2.text);
     return {
       chars: unit2.text.length,
@@ -37289,9 +37290,15 @@ function writePromptContextFiles(options) {
       sourceUrl: unit2.sourceUrl
     };
   });
+  const index = writeTextReference({
+    path: join3(rootDir, "index.jsonl"),
+    rootDir,
+    text: contextIndexText(units)
+  });
   const manifestContent = {
     full_context: fullContext,
     generatedAt: options.context.generatedAt,
+    index,
     repository: options.context.repository,
     total_units: units.length,
     units
@@ -37303,6 +37310,7 @@ function writePromptContextFiles(options) {
   });
   return {
     full_context: fullContext,
+    index,
     manifest,
     root_dir: rootDir,
     units,
@@ -37312,12 +37320,37 @@ function writePromptContextFiles(options) {
 function writeJsonReference(options) {
   const text = `${JSON.stringify(options.content, null, 2)}
 `;
-  writeFileSync2(options.path, text);
+  return writeTextReference({ ...options, text });
+}
+function writeTextReference(options) {
+  writeFileSync2(options.path, options.text);
   return {
-    chars: text.length,
+    chars: options.text.length,
     path: options.path,
     relative_path: relative2(options.rootDir, options.path),
-    sha256: sha2562(text)
+    sha256: sha2562(options.text)
+  };
+}
+function contextIndexText(units) {
+  if (units.length === 0) return "";
+  return `${units.map(contextIndexEntry).map((entry) => JSON.stringify(entry)).join("\n")}
+`;
+}
+function contextIndexEntry(unit2) {
+  const entry = {
+    chars: unit2.chars,
+    file: unit2.relative_path,
+    kind: unit2.kind
+  };
+  if (unit2.kind === "pull-request-file") {
+    return { ...entry, metadata: unit2.metadata, path: unit2.path_in_repository };
+  }
+  return {
+    ...entry,
+    id: unit2.id,
+    label: unit2.label,
+    ...unit2.metadata ? { metadata: unit2.metadata } : {},
+    ...unit2.sourceUrl ? { sourceUrl: unit2.sourceUrl } : {}
   };
 }
 function unitFilename(unitId, index) {
@@ -57209,9 +57242,10 @@ async function runClaudeCodeSdkStage({
     let messageCount = 0;
     for await (const message of VCe({
       options: {
+        ...options.contextFilesRoot ? { additionalDirectories: [options.contextFilesRoot] } : {},
         allowDangerouslySkipPermissions: true,
         allowedTools: mcpConfig.claudeAllowedTools,
-        cwd: options.cwd,
+        cwd: options.isolateWorkspace ? contextDir : options.cwd,
         effort: claudeEffort(profile),
         env,
         maxTurns: options.maxTurns,
@@ -57226,7 +57260,7 @@ async function runClaudeCodeSdkStage({
         persistSession: false,
         strictMcpConfig: Object.keys(mcpConfig.claudeMcpServers).length > 0,
         systemPrompt: options.system,
-        tools: options.toolOverride
+        tools: options.isolateWorkspace ? [] : options.toolOverride
       },
       prompt: options.prompt
     })) {
@@ -57352,6 +57386,15 @@ function logClaudeSdkMessage(message, logger) {
       permission: message.permissionMode,
       tools: message.tools.length,
       version: message.claude_code_version
+    });
+    return;
+  }
+  if (message.type === "system" && message.subtype === "compact_boundary") {
+    logger?.event("ai.claude.compact", {
+      duration_ms: message.compact_metadata.duration_ms,
+      post_tokens: message.compact_metadata.post_tokens,
+      pre_tokens: message.compact_metadata.pre_tokens,
+      trigger: message.compact_metadata.trigger
     });
     return;
   }
@@ -58016,7 +58059,7 @@ async function runCodexSdkStage({
     const sdk = new Codex({
       ...codexAuthOptions(codexEnv),
       codexPathOverride: codexExecutablePath(),
-      config: codexConfig(profile, mcpConfig.codexConfig),
+      config: codexConfig(profile, mcpConfig.codexConfig, options.isolateWorkspace),
       env: stringEnv(codexEnv.env)
     });
     options.logger?.event("ai.request.start", {
@@ -58036,9 +58079,10 @@ async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      sandboxMode: options.sandboxMode || "danger-full-access",
+      ...options.isolateWorkspace ? { networkAccessEnabled: false, webSearchMode: "disabled" } : {},
+      sandboxMode: options.isolateWorkspace ? "read-only" : options.sandboxMode || "danger-full-access",
       skipGitRepoCheck: true,
-      workingDirectory: options.cwd
+      workingDirectory: options.isolateWorkspace ? contextDir : options.cwd
     });
     const result = await thread.run(codexPrompt(options), {
       outputSchema: codexOutputSchema(options.schema)
@@ -58061,12 +58105,26 @@ async function runCodexSdkStage({
     rmSync3(contextDir, { force: true, recursive: true });
   }
 }
-function codexConfig(profile, mcpConfig) {
+function codexConfig(profile, mcpConfig, isolateWorkspace = false) {
   const reasoning = profile.reasoning;
   const summary = stringValue(reasoning?.summary);
   return {
     model_provider: "openai",
     ...mcpConfig,
+    ...isolateWorkspace ? {
+      features: {
+        apps: false,
+        browser_use: false,
+        browser_use_external: false,
+        computer_use: false,
+        image_generation: false,
+        in_app_browser: false,
+        multi_agent: false,
+        plugins: false,
+        shell_tool: false,
+        unified_exec: false
+      }
+    } : {},
     ...summary ? { model_reasoning_summary: summary } : {}
   };
 }
@@ -58628,13 +58686,12 @@ function readRoleDefinition(cwd, role) {
   if (!content) throw new Error(`Role definition must not be empty: ${role}`);
   return content;
 }
-function roleGroupSynthesisMembers(cwd, plan) {
+function roleGroupSynthesisMembers(plan) {
   return plan.matrix.include.map((member) => ({
     artifact: member.artifact,
     index: member.index,
     profile: member.profile,
-    role: member.role,
-    roleDefinition: member.role ? readRoleDefinition(cwd, member.role) : ""
+    role: member.role
   }));
 }
 function loadMatrixStageResults(directory, stage) {
@@ -58664,8 +58721,7 @@ ${JSON.stringify(
         artifact: member.artifact,
         index: member.index,
         profile: member.profile,
-        role: member.role,
-        role_definition: member.roleDefinition
+        role: member.role
       })),
       results: options.results.map((result) => ({
         output: result.parsedOutput,
@@ -58683,16 +58739,15 @@ ${JSON.stringify(
   )}
 </role_group_results>`;
 }
-function synthesizerSystemAddition() {
+function synthesizerSystemPrompt() {
   return [
     "<role_group_synthesizer>",
-    "You are synthesizing multiple GitVibe role results into one final stage result.",
-    "Use configured role definitions to understand each member's review lens and expected coverage.",
-    "Inspect the repository and GitHub context when member outputs disagree, omit important concepts, or need evidence.",
-    "Return the existing stage schema only. Do not return arrays of reviewer results.",
-    "You may add your own findings only when they are grounded in inspected repository, diff, or GitHub evidence.",
-    "Discard false positives, duplicate findings, obsolete findings, and over-engineered suggestions.",
+    "You combine multiple GitVibe role results into one final stage result.",
+    "Build every output field from the member results.",
+    "Preserve every distinct member finding.",
+    "Merge findings only when they describe the same underlying issue, combining their evidence, references, tests, severity, and inline comment details.",
     "Mention role success and failure counts in summary or comment_body when any role result is missing.",
+    "Return one JSON object matching the existing stage schema.",
     "</role_group_synthesizer>"
   ].join("\n");
 }
@@ -59623,6 +59678,7 @@ function isReviewLine(index, comment) {
 }
 function isReviewRange(index, comment) {
   if (comment.start_line === void 0) return true;
+  if (comment.start_line > comment.line) return false;
   const hunks = sideHunks(index, comment);
   const startHunk = hunks?.get(comment.start_line);
   return startHunk !== void 0 && startHunk === hunks?.get(comment.line);
@@ -59989,11 +60045,6 @@ function reviewFindingComment(value, index) {
   const reviewComment = { body, line, path: path3, side };
   const startLine = integerField(value.start_line);
   if (startLine !== void 0) {
-    if (startLine > line) {
-      throw new Error(
-        `review-matrix inline_comments[${index}].start_line must be less than or equal to line.`
-      );
-    }
     reviewComment.start_line = startLine;
     reviewComment.start_side = side;
   }
@@ -60881,7 +60932,7 @@ async function runMatrixFinalizerResult({
       options
     });
   }
-  const members = roleGroupSynthesisMembers(options.cwd, plan);
+  const members = roleGroupSynthesisMembers(plan);
   const buildResult = stageResultBuilder({ context, definition, logger, options });
   const sanitizedResults = sanitizedMatrixMemberResults(results);
   const finalizerSafetySources = matrixFinalizerSafetySources({ results: sanitizedResults });
@@ -60896,23 +60947,23 @@ async function runMatrixFinalizerResult({
     runner: options
   });
   if (blocked) return blocked;
-  const prompt = [
-    aiRunOptions.prompt,
-    synthesisPromptAddition({
-      expected,
-      failed,
-      members,
-      results: sanitizedResults,
-      roleGroup: plan.roleGroup,
-      stage: options.stage
-    })
-  ].join("\n\n");
+  const prompt = synthesisPromptAddition({
+    expected,
+    failed,
+    members,
+    results: sanitizedResults,
+    roleGroup: plan.roleGroup,
+    stage: options.stage
+  });
   return stageRunResult({
     content: await runAiStage({
       ...aiRunOptions,
+      contextFilesRoot: void 0,
+      isolateWorkspace: true,
       profileName: plan.synthesizerProfile,
       prompt,
-      system: [aiRunOptions.system, synthesizerSystemAddition()].join("\n\n")
+      system: synthesizerSystemPrompt(),
+      toolOverride: []
     }),
     context,
     definition,
@@ -61618,56 +61669,66 @@ async function runStage(options) {
     safetyOptions
   });
   if (inputSafetyResult) return inputSafetyResult;
-  const mcpContext = await resolveMcpContext({ ...stageContext, config: config2, context: promptContext });
-  if (mcpContext.blockedResult) return finishStage(logger, mcpContext.blockedResult);
-  const schema = loadStageSchema(definition.schemaFile);
-  const contextFiles = persistContext({
-    context: promptContext,
-    ignoredAuthors,
-    logger,
-    options
-  });
-  const prompts = buildRenderedPrompts({
-    context: promptContext,
-    contextFiles,
-    definition,
-    options,
-    schema
-  });
-  if (mcpContext.promptAddition) {
-    prompts.prompt = `${prompts.prompt}
-
-${mcpContext.promptAddition}`;
-  }
-  logger.event("prompt.ready", {
-    schema_id: definition.schemaId,
-    tools: definition.tools.join(",")
-  });
-  const aiRunOptions = buildAiRunOptions({
+  const prepared = await prepareStageAi({
     client,
     config: config2,
-    contextFiles,
+    context: promptContext,
     definition,
+    executionMode,
+    ignoredAuthors,
     logger,
     options,
-    prompts,
-    schema
+    safetyOptions,
+    transientComments
   });
-  const promptSafetyResult = await blockMcpPromptInput({
-    promptAddition: mcpContext.promptAddition,
-    safetyOptions
-  });
-  if (promptSafetyResult) return promptSafetyResult;
+  if (prepared.status === "blocked") return finishStage(logger, prepared.result);
   const result = await runCheckedStageResult({
     ...stageContext,
     acceptedRisk,
-    aiRunOptions,
+    aiRunOptions: prepared.aiRunOptions,
     config: config2,
     executionMode,
     safetyOptions
   });
   await publishAcceptedRiskAuditForLabeledContext({ ...safetyOptions, acceptedRisk, result });
   return finishStage(logger, result);
+}
+async function prepareStageAi(options) {
+  const schema = loadStageSchema(options.definition.schemaFile);
+  if (options.executionMode === "finalizer") {
+    options.logger.event("prompt.ready", {
+      schema_id: options.definition.schemaId,
+      tools: ""
+    });
+    return {
+      aiRunOptions: buildFinalizerAiRunOptions({ ...options, schema }),
+      status: "ready"
+    };
+  }
+  const mcpContext = await resolveMcpContext(options);
+  if (mcpContext.blockedResult) {
+    return { result: mcpContext.blockedResult, status: "blocked" };
+  }
+  const contextFiles = persistContext(options);
+  const prompts = buildRenderedPrompts({ ...options, contextFiles, schema });
+  if (mcpContext.promptAddition) {
+    prompts.prompt = `${prompts.prompt}
+
+${mcpContext.promptAddition}`;
+  }
+  options.logger.event("prompt.ready", {
+    schema_id: options.definition.schemaId,
+    tools: options.definition.tools.join(",")
+  });
+  const promptSafetyResult = await blockMcpPromptInput({
+    promptAddition: mcpContext.promptAddition,
+    safetyOptions: options.safetyOptions
+  });
+  if (promptSafetyResult) return { result: promptSafetyResult, status: "blocked" };
+  return {
+    aiRunOptions: buildAiRunOptions({ ...options, contextFiles, prompts, schema }),
+    status: "ready"
+  };
 }
 async function blockInitialPromptInput(options) {
   if (options.acceptedRisk) return blockAcceptedRiskDeltaInput(options.safetyOptions);
@@ -61709,13 +61770,19 @@ function blockMcpPromptInput(options) {
 var mcpPromptSafetySources = (promptAddition) => promptAddition ? [{ label: "rendered MCP context prompt addition", text: promptAddition }] : [];
 async function runCheckedStageResult(options) {
   const result = await runStageResultForMode(options);
-  recordContextCoverage({
-    coverage: contextPromptCoverageForContext(options.context, {
-      budgetChars: Number.MAX_SAFE_INTEGER,
-      ignoredAuthors: safetyIgnoredAuthors(options.config)
-    }),
-    logger: options.logger
-  });
+  if (options.executionMode === "finalizer") {
+    options.logger.event("context.coverage.skip", {
+      reason: "matrix-finalizer-member-results-only"
+    });
+  } else {
+    recordContextCoverage({
+      coverage: contextPromptCoverageForContext(options.context, {
+        budgetChars: Number.MAX_SAFE_INTEGER,
+        ignoredAuthors: safetyIgnoredAuthors(options.config)
+      }),
+      logger: options.logger
+    });
+  }
   if (options.executionMode === "member") return result;
   const outputSafetyResult = await blockUnsafePromptInjection({
     ...options.safetyOptions,
@@ -61780,6 +61847,8 @@ function persistContext(options) {
   });
   options.logger.event("context.persisted", {
     file: `git-vibe-${options.options.stage}-context.json`,
+    index: contextFiles.index.path,
+    index_chars: contextFiles.index.chars,
     manifest: contextFiles.manifest.path,
     units: contextFiles.units.length
   });
@@ -61799,6 +61868,21 @@ function buildAiRunOptions(options) {
     stage: options.options.stage,
     stageDefinition: options.definition,
     system: options.prompts.system
+  };
+}
+function buildFinalizerAiRunOptions(options) {
+  return {
+    config: options.config,
+    cwd: options.options.cwd,
+    logger: options.logger,
+    maxTurns: options.options.maxTurns,
+    profileName: options.options.profileName,
+    prompt: "",
+    schema: options.schema,
+    schemaId: options.definition.schemaId,
+    stage: options.options.stage,
+    stageDefinition: options.definition,
+    system: ""
   };
 }
 async function loadRunnerContext(options) {

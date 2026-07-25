@@ -42,9 +42,15 @@ export function writePromptContextFiles(options: {
       sourceUrl: unit.sourceUrl,
     } satisfies PromptContextUnitFile;
   });
+  const index = writeTextReference({
+    path: join(rootDir, "index.jsonl"),
+    rootDir,
+    text: contextIndexText(units),
+  });
   const manifestContent = {
     full_context: fullContext,
     generatedAt: options.context.generatedAt,
+    index,
     repository: options.context.repository,
     total_units: units.length,
     units,
@@ -57,6 +63,7 @@ export function writePromptContextFiles(options: {
 
   return {
     full_context: fullContext,
+    index,
     manifest,
     root_dir: rootDir,
     units,
@@ -70,12 +77,46 @@ function writeJsonReference(options: {
   rootDir: string;
 }): PromptContextFileReference {
   const text = `${JSON.stringify(options.content, null, 2)}\n`;
-  writeFileSync(options.path, text);
+  return writeTextReference({ ...options, text });
+}
+
+function writeTextReference(options: {
+  path: string;
+  rootDir: string;
+  text: string;
+}): PromptContextFileReference {
+  writeFileSync(options.path, options.text);
   return {
-    chars: text.length,
+    chars: options.text.length,
     path: options.path,
     relative_path: relative(options.rootDir, options.path),
-    sha256: sha256(text),
+    sha256: sha256(options.text),
+  };
+}
+
+function contextIndexText(units: PromptContextUnitFile[]): string {
+  if (units.length === 0) return "";
+  return `${units
+    .map(contextIndexEntry)
+    .map((entry) => JSON.stringify(entry))
+    .join("\n")}\n`;
+}
+
+function contextIndexEntry(unit: PromptContextUnitFile): JsonObject {
+  const entry: JsonObject = {
+    chars: unit.chars,
+    file: unit.relative_path,
+    kind: unit.kind,
+  };
+  if (unit.kind === "pull-request-file") {
+    return { ...entry, metadata: unit.metadata, path: unit.path_in_repository };
+  }
+  return {
+    ...entry,
+    id: unit.id,
+    label: unit.label,
+    ...(unit.metadata ? { metadata: unit.metadata } : {}),
+    ...(unit.sourceUrl ? { sourceUrl: unit.sourceUrl } : {}),
   };
 }
 

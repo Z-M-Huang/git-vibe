@@ -156,6 +156,7 @@ function isReviewRange(
   comment: PullRequestReviewComment,
 ): boolean {
   if (comment.start_line === undefined) return true;
+  if (comment.start_line > comment.line) return false;
   const hunks = sideHunks(index, comment);
   const startHunk = hunks?.get(comment.start_line);
   return startHunk !== undefined && startHunk === hunks?.get(comment.line);

@@ -545,7 +545,7 @@ describe("GitVibe workflow numeric inputs", () => {
       for (const [jobName, job] of Object.entries(workflow.jobs || {})) {
         const timeout = job["timeout-minutes"];
         if (String(job.uses || "").startsWith("./.github/workflows/")) continue;
-        if (jobName === "security-review" || jobName.startsWith("plan-")) {
+        if (jobName.startsWith("plan-")) {
           expect(timeout).toBe(10);
           continue;
         }

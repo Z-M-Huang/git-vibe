@@ -60,6 +60,7 @@ export interface PromptContextUnitFile extends PromptContextFileReference {
 
 export interface PackedPromptContextFiles {
   full_context: PromptContextFileReference;
+  index: PromptContextFileReference;
   manifest: PromptContextFileReference;
   root_dir: string;
   units: PromptContextUnitFile[];
@@ -249,23 +250,35 @@ function packedFileBackedContextForPrompt(
   return {
     artifact: packedArtifact(context),
     context_files: {
-      full_context: fileContext.full_context,
+      index: fileContext.index,
       manifest: fileContext.manifest,
-      root_dir: fileContext.root_dir,
       units_dir: fileContext.units_dir,
     },
     context_manifest: {
       delivery: "file-backed",
+      handoffs: context.handoffs?.length || 0,
+      index_format: "git-vibe.context-index.v1",
+      pull_request_additions: sumPullRequestFileField(context, "additions"),
+      pull_request_deletions: sumPullRequestFileField(context, "deletions"),
+      pull_request_files: context.pullRequestFiles?.length || 0,
+      timeline_items: context.timeline.length,
       total_units: fileContext.units.length,
-      units: fileContext.units.map(fileBackedUnitManifest),
+      units_by_kind: countUnitsByKind(fileContext.units),
     },
     generatedAt: context.generatedAt,
-    handoffs: packedHandoffs(context),
-    pullRequestFiles: packedPullRequestFiles(context),
     repository: context.repository,
     source: packedSource(context),
-    timeline: context.timeline.map(packedTimelineItem),
   };
+}
+
+function countUnitsByKind(units: PromptContextUnitFile[]): JsonObject {
+  const counts: Record<string, number> = {};
+  for (const unitItem of units) counts[unitItem.kind] = (counts[unitItem.kind] || 0) + 1;
+  return counts;
+}
+
+function sumPullRequestFileField(context: ContextPacket, field: "additions" | "deletions"): number {
+  return (context.pullRequestFiles || []).reduce((total, file) => total + (file[field] || 0), 0);
 }
 
 export function contextPromptCoverageForContext(
@@ -424,6 +437,8 @@ function timelineUnits(item: TimelineItem, index: number): ContentUnit[] {
         id: item.id,
         kind: item.kind,
         parentId: item.parentId,
+        reviewThreadId: item.reviewThreadId,
+        reviewThreadIsOutdated: item.reviewThreadIsOutdated,
         updatedAt: bodyTimelineKind(item.kind) ? undefined : item.updatedAt,
       },
       sourceUrl: item.url,
@@ -534,24 +549,6 @@ function unitManifest(unitItem: ContentUnit, chunks: ContentChunk[], includedIds
     pending_chunks: unitChunks.filter((chunk) => !includedIds.has(chunk.id)).length,
     path: unitItem.path,
     sha256: sha256(unitItem.text),
-    sourceUrl: unitItem.sourceUrl,
-  };
-}
-
-function fileBackedUnitManifest(unitItem: PromptContextUnitFile): JsonObject {
-  return {
-    chars: unitItem.chars,
-    file: {
-      chars: unitItem.chars,
-      path: unitItem.path,
-      relative_path: unitItem.relative_path,
-      sha256: unitItem.sha256,
-    },
-    id: unitItem.id,
-    kind: unitItem.kind,
-    label: unitItem.label,
-    metadata: unitItem.metadata,
-    path: unitItem.path_in_repository,
     sourceUrl: unitItem.sourceUrl,
   };
 }

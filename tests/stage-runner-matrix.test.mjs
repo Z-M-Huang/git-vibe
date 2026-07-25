@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -148,7 +148,12 @@ describe("stage runner matrix member profile context", () => {
     expect(prompt).toContain("Focus on token boundaries.");
     expect(prompt).toContain('"context_files"');
     expect(prompt).toContain('"delivery": "file-backed"');
+    expect(prompt).toContain('"index_format": "git-vibe.context-index.v1"');
     expect(prompt).not.toContain('"included_context_chunks"');
+    expect(prompt).not.toContain('"pullRequestFiles"');
+    const indexPath = prompt.match(/"index": \{\n\s+"chars": \d+,\n\s+"path": "([^"]+)"/)?.[1];
+    expect(indexPath).toBeTruthy();
+    expect(readFileSync(indexPath, "utf8")).toContain('"id":"artifact-body"');
     const manifestPath = prompt.match(
       /"manifest": \{\n\s+"chars": \d+,\n\s+"path": "([^"]+)"/,
     )?.[1];
@@ -260,13 +265,25 @@ describe("stage runner matrix finalizer synthesis", () => {
     const prompt = globalThis.__gitVibeSdkMocks.codexRun.mock.calls[0][0];
     expect(prompt).toContain("<role_group_results>");
     expect(prompt).toContain('"configured_members"');
-    expect(prompt).toContain('"role_definition": "Focus on token boundaries."');
     expect(prompt).toContain("<role_group_synthesizer>");
-    expect(prompt).toContain("Inspect the repository and GitHub context");
+    expect(prompt).toContain("Preserve every distinct member finding.");
     expect(prompt).toContain('<git_vibe_profile_context profile="test" path="PROFILE.md">');
     expect(prompt).toContain("Synthesizer profile guidance.");
+    expect(prompt).not.toContain("Focus on token boundaries.");
+    expect(prompt).not.toContain("<context_package>");
+    expect(prompt).not.toContain("<required_process>");
+    expect(globalThis.__gitVibeSdkMocks.codexStartThread.mock.calls[0][0]).not.toHaveProperty(
+      "additionalDirectories",
+    );
+    expect(
+      readdirSync(process.env.RUNNER_TEMP, { withFileTypes: true }).filter(
+        (entry) => entry.isDirectory() && entry.name.startsWith("git-vibe-validate-"),
+      ),
+    ).toEqual([]);
   });
+});
 
+describe("stage runner matrix finalizer input safety", () => {
   it("blocks role-group synthesis before the synthesizer LLM sees injected member output", async () => {
     const cwd = await workspace(`${roleGroupConfig("validate")}\n${enabledSafetyConfig()}`);
     writeRole(cwd, "security.md", "Focus on token boundaries.");

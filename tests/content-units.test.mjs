@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   acceptedRiskDeltaContentUnits,
@@ -12,11 +12,14 @@ import {
   pullRequestFileText,
 } from "../src/runner/content-units.ts";
 import { writePromptContextFiles } from "../src/runner/context-files.ts";
+import { renderPrompts } from "../src/runner/prompts.ts";
+import { loadStageSchema } from "../src/runner/schemas.ts";
 import {
   acceptedRiskArtifactContentSha,
   acceptedRiskMetadataBodySha,
   acceptedRiskMetadataBlock,
 } from "../src/shared/accepted-risk.ts";
+import { stageDefinitions } from "../src/shared/stages.ts";
 
 describe("context content units", () => {
   it("splits large context units into overlapping chunks", () => {
@@ -105,26 +108,150 @@ describe("file-backed context prompt packing", () => {
       const packed = /** @type {any} */ (packedContextForPrompt(context, { fileContext }));
 
       expect(existsSync(fileContext.full_context.path)).toBe(true);
+      expect(existsSync(fileContext.index.path)).toBe(true);
       expect(existsSync(fileContext.manifest.path)).toBe(true);
       expect(fileContext.units.some((unit) => unit.id === "artifact-body")).toBe(true);
+      expect(packed.context_files.index.path).toBe(fileContext.index.path);
       expect(packed.context_files.manifest.path).toBe(fileContext.manifest.path);
       expect(packed.context_manifest).toMatchObject({
         delivery: "file-backed",
+        handoffs: 0,
+        index_format: "git-vibe.context-index.v1",
+        pull_request_additions: 1,
+        pull_request_deletions: 0,
+        pull_request_files: 1,
+        timeline_items: 0,
         total_units: fileContext.units.length,
+        units_by_kind: {
+          artifact: 2,
+          "pull-request-file": 1,
+        },
       });
-      expect(packed.context_manifest.units).toEqual(
+      expect(packed.context_manifest.units).toBeUndefined();
+      expect(packed.context_files.full_context).toBeUndefined();
+      expect(packed.context_files.root_dir).toBeUndefined();
+      expect(packed.handoffs).toBeUndefined();
+      expect(packed.pullRequestFiles).toBeUndefined();
+      expect(packed.timeline).toBeUndefined();
+      expect(JSON.stringify(packed)).not.toContain("A".repeat(160));
+      expect(readFileSync(fileContext.manifest.path, "utf8")).toContain("artifact-body");
+      const indexRows = readJsonLines(fileContext.index.path);
+      expect(indexRows).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            file: expect.objectContaining({ path: expect.any(String) }),
+            chars: 220,
+            file: expect.stringContaining("artifact-body"),
             id: "artifact-body",
+            kind: "artifact",
+            label: "artifact body",
+          }),
+          expect.objectContaining({
+            file: expect.stringContaining("pull-request-file"),
+            kind: "pull-request-file",
+            metadata: { additions: 1, changes: 1, deletions: 0, status: "modified" },
+            path: "docs/prompt.md",
           }),
         ]),
       );
-      expect(JSON.stringify(packed)).not.toContain("A".repeat(160));
-      expect(readFileSync(fileContext.manifest.path, "utf8")).toContain("artifact-body");
       const bodyUnit = fileContext.units.find((unit) => unit.id === "artifact-body");
       if (!bodyUnit) throw new Error("artifact-body unit file was not written.");
       expect(readFileSync(bodyUnit.path, "utf8")).toContain("A".repeat(160));
+    } finally {
+      rmSync(rootDir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("file-backed review thread metadata", () => {
+  it("indexes thread identity and outdated state for review comments", () => {
+    const context = contextPacket();
+    context.timeline = [
+      {
+        author: "reviewer",
+        body: "Outdated feedback",
+        createdAt: "2026-01-01T00:00:00Z",
+        id: "review-comment-1",
+        kind: "pull-request-review-comment",
+        reviewThreadId: "thread-1",
+        reviewThreadIsOutdated: true,
+        url: "https://github.com/example/repo/pull/12#discussion_r1",
+      },
+    ];
+    const rootDir = mkdtempSync(join(tmpdir(), "git-vibe-context-files-"));
+    try {
+      const fileContext = writePromptContextFiles({ context, rootDir, stage: "investigate" });
+      const indexUnit = readJsonLines(fileContext.index.path).find(
+        (unit) => unit.kind === "timeline",
+      );
+      const manifest =
+        /** @type {{ units: import("../src/runner/content-units.ts").PromptContextUnitFile[] }} */ (
+          JSON.parse(readFileSync(fileContext.manifest.path, "utf8"))
+        );
+      const manifestUnit = manifest.units.find((unit) => unit.kind === "timeline");
+
+      for (const unit of [indexUnit, manifestUnit]) {
+        expect(unit.metadata).toMatchObject({
+          reviewThreadId: "thread-1",
+          reviewThreadIsOutdated: true,
+        });
+      }
+    } finally {
+      rmSync(rootDir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("large file-backed context prompt packing", () => {
+  it("keeps a 400-file prompt compact while every patch remains index-addressable", () => {
+    const context = largePullRequestContext(400);
+    const oneFileContextPacket = {
+      ...context,
+      pullRequestFiles: context.pullRequestFiles.slice(0, 1),
+    };
+    const rootDir = mkdtempSync(join(tmpdir(), "git-vibe-large-context-"));
+    try {
+      const oneFileContext = writePromptContextFiles({
+        context: oneFileContextPacket,
+        rootDir: join(rootDir, "one"),
+        stage: "review-matrix",
+      });
+      const manyFileContext = writePromptContextFiles({
+        context,
+        rootDir: join(rootDir, "many"),
+        stage: "review-matrix",
+      });
+      const onePacked = packedContextForPrompt(oneFileContextPacket, {
+        fileContext: oneFileContext,
+      });
+      const manyPacked = packedContextForPrompt(context, { fileContext: manyFileContext });
+      const stage = stageDefinitions["review-matrix"];
+      const prompts = renderPrompts({
+        context,
+        contextFiles: manyFileContext,
+        outputSchema: loadStageSchema(stage.schemaFile),
+        promptDir: stage.promptDir,
+        repositoryContext: "## Repository",
+        stageContract: "Review the pull request.",
+      });
+
+      expect(JSON.stringify(manyPacked).length).toBeLessThan(10_000);
+      expect(JSON.stringify(manyPacked).length - JSON.stringify(onePacked).length).toBeLessThan(
+        1_000,
+      );
+      expect(prompts.prompt.length).toBeLessThan(100_000);
+      expect(prompts.prompt).not.toContain("patch-content-399");
+      expect(prompts.prompt).not.toContain("src/generated/file-399.ts");
+
+      const indexRows = readJsonLines(manyFileContext.index.path);
+      expect(indexRows).toHaveLength(manyFileContext.units.length);
+      const targetRow = indexRows.find((row) => row.path === "src/generated/file-399.ts");
+      expect(targetRow).toMatchObject({
+        kind: "pull-request-file",
+        metadata: { additions: 1, changes: 2, deletions: 1, status: "modified" },
+      });
+      expect(readFileSync(join(dirname(manyFileContext.index.path), targetRow.file), "utf8")).toBe(
+        pullRequestFileText(context.pullRequestFiles[399]),
+      );
     } finally {
       rmSync(rootDir, { force: true, recursive: true });
     }
@@ -318,6 +445,31 @@ function contextPacket({ body = "Issue body", patch = "@@ -1 +1 @@\n-old\n+new" 
     repository: "example/repo",
     timeline: [],
   });
+}
+
+/** @param {number} fileCount */
+function largePullRequestContext(fileCount) {
+  const context = contextPacket({ body: "Large pull request" });
+  return {
+    ...context,
+    pullRequestFiles: Array.from({ length: fileCount }, (_, index) => ({
+      additions: 1,
+      changes: 2,
+      deletions: 1,
+      filename: `src/generated/file-${index}.ts`,
+      patch: `@@ -1 +1 @@\n-${"old".repeat(1_000)}\n+patch-content-${index}-${"new".repeat(1_000)}`,
+      status: "modified",
+    })),
+  };
+}
+
+/** @param {string} path */
+function readJsonLines(path) {
+  return readFileSync(path, "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 /**

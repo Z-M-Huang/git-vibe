@@ -4,7 +4,7 @@ import { parse } from "yaml";
 
 /**
  * @typedef {{ id?: string, uses?: string, with?: Record<string, unknown> }} WorkflowStep
- * @typedef {{ if?: string, needs?: string | string[], outputs?: Record<string, string>, permissions?: Record<string, string>, steps?: WorkflowStep[], ["timeout-minutes"]?: number }} WorkflowJob
+ * @typedef {{ if?: string, needs?: string | string[], outputs?: Record<string, string>, permissions?: Record<string, string>, steps?: WorkflowStep[], ["timeout-minutes"]?: string | number }} WorkflowJob
  * @typedef {{ jobs?: Record<string, WorkflowJob> }} Workflow
  */
 
@@ -41,7 +41,7 @@ describe("GitVibe workflow security review topology", () => {
           status: "${{ steps.security.outputs.status }}",
         }),
         permissions: expect.objectContaining({ contents: "read" }),
-        "timeout-minutes": 10,
+        "timeout-minutes": "${{ fromJSON(inputs.timeout_minutes) }}",
       });
       expect(securityStep, `${file} runs the security review action`).toMatchObject({
         id: "security",

@@ -13,6 +13,22 @@
     "references",
     "next_state"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "completed" },
+          "findings": { "minItems": 1 }
+        },
+        "required": ["status", "findings"]
+      },
+      "then": {
+        "properties": {
+          "next_state": { "const": "changes-required" }
+        }
+      }
+    }
+  ],
   "properties": {
     "stage": { "type": "string", "const": "review-matrix" },
     "status": { "type": "string", "enum": ["completed", "blocked"] },
@@ -28,8 +44,16 @@
         "required": ["path", "line", "body"],
         "properties": {
           "path": { "type": "string", "minLength": 1 },
-          "line": { "type": "integer", "minimum": 1 },
-          "start_line": { "type": "integer", "minimum": 1 },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The final line of the review comment range, or the only line for a single-line comment."
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The optional first line of a range; it must be less than or equal to line."
+          },
           "side": { "type": "string", "enum": ["LEFT", "RIGHT"] },
           "finding_id": {
             "type": "string",

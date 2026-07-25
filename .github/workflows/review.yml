@@ -73,7 +73,7 @@ jobs:
   security-review:
     runs-on: ${{ inputs.runner }}
     needs: plan-review-matrix
-    timeout-minutes: 10
+    timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
     outputs:
       allowed: ${{ steps.security.outputs.allowed }}
       result-file: ${{ steps.security.outputs.result-file }}

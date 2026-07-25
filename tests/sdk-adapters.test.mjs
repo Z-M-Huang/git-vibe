@@ -113,7 +113,8 @@ describe("Claude SDK adapter routing", () => {
         HOME: "/tmp/profile-home",
       },
     });
-    const output = await runAiStage(stageOptions({ cwd, config }));
+    const contextFilesRoot = join(cwd, "git-vibe-context-files");
+    const output = await runAiStage(stageOptions({ cwd, config, contextFilesRoot }));
 
     expect(JSON.parse(output)).toMatchObject({
       next_state: "ready-for-implementation",
@@ -123,6 +124,7 @@ describe("Claude SDK adapter routing", () => {
     const queryOptions = queryCall.options;
     expect(queryCall.prompt).toBe("Prompt");
     expect(queryOptions).toMatchObject({
+      additionalDirectories: [contextFilesRoot],
       allowDangerouslySkipPermissions: true,
       cwd,
       effort: "max",
@@ -236,6 +238,16 @@ describe("Claude SDK adapter logging", () => {
         type: "system",
       },
       {
+        compact_metadata: {
+          duration_ms: 456,
+          post_tokens: 72_000,
+          pre_tokens: 190_000,
+          trigger: "auto",
+        },
+        subtype: "compact_boundary",
+        type: "system",
+      },
+      {
         attempt: 2,
         error: "rate limited",
         error_status: 429,
@@ -285,6 +297,7 @@ describe("Claude SDK adapter logging", () => {
     expect(logger.event.mock.calls.map(([name]) => name)).toEqual(
       expect.arrayContaining([
         "ai.claude.init",
+        "ai.claude.compact",
         "ai.claude.retry",
         "ai.claude.message",
         "ai.claude.thinking",
@@ -301,6 +314,12 @@ describe("Claude SDK adapter logging", () => {
     expect(messageFields.text).toContain("<redacted:");
     expect(commandFields.input).not.toContain(secret.slice(0, 12));
     expect(commandFields.input).toContain("<redacted:");
+    expect(logger.event.mock.calls.find(([name]) => name === "ai.claude.compact")[1]).toEqual({
+      duration_ms: 456,
+      post_tokens: 72_000,
+      pre_tokens: 190_000,
+      trigger: "auto",
+    });
   });
 });
 
