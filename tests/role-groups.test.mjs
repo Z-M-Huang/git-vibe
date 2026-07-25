@@ -313,7 +313,7 @@ describe("role group result loading", () => {
         result: { schemaId: "review-matrix.v1", status: "completed", summary: "Done." },
       }),
     ).toMatchObject({ profile: "", role: "" });
-    const synthesizerSystem = synthesizerSystemPrompt();
+    const synthesizerSystem = synthesizerSystemPrompt("review-matrix");
     expect(synthesizerSystem).toContain("<role_group_synthesizer>");
     expect(synthesizerSystem).toContain("Build every output field from the member results.");
     expect(synthesizerSystem).toContain("Preserve every distinct member finding.");
@@ -323,6 +323,10 @@ describe("role group result loading", () => {
     expect(synthesizerSystem).not.toContain("Inspect the repository");
     expect(synthesizerSystem).not.toContain("add your own findings");
     expect(synthesizerSystem).not.toContain("Discard false positives");
+    expect(synthesizerSystem).toContain(
+      "Every inline_comments finding_id must be unique in the final output.",
+    );
+    expect(synthesizerSystemPrompt("validate")).not.toContain("inline_comments finding_id");
 
     cleanupWorkspace(cwd);
   });

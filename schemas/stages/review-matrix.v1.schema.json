@@ -38,6 +38,7 @@
     "inline_comments": {
       "type": "array",
       "maxItems": 50,
+      "description": "GitHub pull request review comments. Every finding_id must be unique within this array.",
       "items": {
         "type": "object",
         "additionalProperties": false,

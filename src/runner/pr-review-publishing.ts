@@ -1,9 +1,14 @@
-import { createHash } from "node:crypto";
 import { GitHubClient, isGitHubGraphQLForbiddenError, splitRepository } from "../shared/github.js";
 import { workflowRunIdFromUrl } from "../shared/status-comments.js";
 import type { ContextPacket, JsonObject, RunnerOptions } from "../shared/types.js";
 import type { StageLogger } from "./logging.js";
 import { validateReviewFindingAnchors, type UnanchoredReviewFinding } from "./pr-review-anchors.js";
+import {
+  effectiveReviewFindingId,
+  normalizedFindingId,
+  reviewFindingMarkerId,
+  visibleReviewCommentBody,
+} from "./review-finding-ids.js";
 import {
   createPullRequestReview,
   type PullRequestReviewComment,
@@ -317,7 +322,7 @@ function priorReviewFindingCandidates(
   const candidates: Array<Omit<PriorReviewFinding, "updateKeys"> & { author: string }> = [];
   for (const item of context.timeline) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
-    const findingId = parseReviewFindingMarker(item.body)?.id;
+    const findingId = reviewFindingMarkerId(item.body);
     const reviewThreadId = stringField(item.reviewThreadId);
     const commentDatabaseId = reviewCommentDatabaseId(item.databaseId);
     if (!findingId || !reviewThreadId || !commentDatabaseId) continue;
@@ -473,10 +478,14 @@ function reviewFindingComment(value: unknown, index: number): ReviewFindingComme
       `review-matrix inline_comments[${index}].finding_id must match the allowed pattern.`,
     );
   }
-  const findingId =
-    normalizedExplicitFindingId ||
-    parseReviewFindingMarker(rawBody)?.id ||
-    generatedFindingId({ body, line, path, startLine });
+  const findingId = effectiveReviewFindingId({
+    body,
+    explicitFindingId,
+    line,
+    path,
+    rawBody,
+    startLine,
+  });
   reviewComment.body = `${reviewFindingMarker(findingId)}\n${body}`;
   return { body, findingId, reviewComment };
 }
@@ -495,11 +504,6 @@ function reviewFindingUpdateMarker(options: {
   status: ReviewFindingUpdateStatus;
 }): string {
   return `<!-- git-vibe:review-finding-update id=${options.id} status=${options.status} sha=${options.sha} -->`;
-}
-
-function parseReviewFindingMarker(body: string): { id: string } | undefined {
-  const id = normalizedFindingId(markerAttributes(body, "git-vibe:review-finding").id);
-  return id ? { id } : undefined;
 }
 
 function parseReviewFindingUpdateMarker(
@@ -534,27 +538,6 @@ function reviewFindingUpdateKey(options: {
   status: ReviewFindingUpdateStatus;
 }): string {
   return `${options.id}:${options.status}:${options.sha}`;
-}
-
-function visibleReviewCommentBody(body: string): string {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
-}
-
-function generatedFindingId(options: {
-  body: string;
-  line: number;
-  path: string;
-  startLine?: number;
-}): string {
-  const fingerprint = [options.path, options.startLine || "", options.line, options.body]
-    .map((part) => String(part).trim())
-    .join("\0");
-  return `gv-${createHash("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
-}
-
-function normalizedFindingId(value: unknown): string | undefined {
-  const id = stringField(value);
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id) ? id : undefined;
 }
 
 function normalizedFindingMarkerValue(value: unknown): string | undefined {

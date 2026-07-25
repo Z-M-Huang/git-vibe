@@ -54184,6 +54184,130 @@ function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// src/runner/review-matrix-output.ts
+import { createHash as createHash4 } from "node:crypto";
+
+// src/runner/review-finding-ids.ts
+import { createHash as createHash3 } from "node:crypto";
+function effectiveReviewFindingId(options) {
+  return normalizedFindingId(options.explicitFindingId) || reviewFindingMarkerId(options.rawBody) || generatedFindingId(options);
+}
+function generatedFindingId(options) {
+  const fingerprint = [options.path, options.startLine || "", options.line, options.body].map((part) => String(part).trim()).join("\0");
+  return `gv-${createHash3("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
+}
+function normalizedFindingId(value) {
+  const id2 = typeof value === "string" ? value.trim() : "";
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id2) ? id2 : void 0;
+}
+function reviewFindingMarkerId(body) {
+  const match = body.match(/<!--\s*git-vibe:review-finding\s+([^>]*)-->/);
+  const id2 = match?.[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
+  return normalizedFindingId(id2);
+}
+function visibleReviewCommentBody(body) {
+  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
+}
+
+// src/runner/review-matrix-output.ts
+function normalizeReviewMatrixOutput(output) {
+  if (!Array.isArray(output.inline_comments)) return unchangedOutput(output);
+  const comments = output.inline_comments;
+  const groups = groupedInlineComments(comments);
+  const duplicateGroups = [...groups.entries()].filter(([, entries]) => entries.length > 1).sort(([left], [right]) => compareStrings(left, right));
+  if (!duplicateGroups.length) return unchangedOutput(output);
+  const normalized = [...comments];
+  const occupiedIds = new Set(groups.keys());
+  let rewrittenInlineComments = 0;
+  for (const [findingId, entries] of duplicateGroups) {
+    const sorted = [...entries].sort(compareInlineComments);
+    const occurrences = /* @__PURE__ */ new Map();
+    for (const [position, entry] of sorted.entries()) {
+      const occurrence = occurrences.get(entry.stableKey) || 0;
+      occurrences.set(entry.stableKey, occurrence + 1);
+      const assignedId = position === 0 ? findingId : collisionFindingId({
+        findingId,
+        occurrence,
+        occupiedIds,
+        stableKey: entry.stableKey
+      });
+      occupiedIds.add(assignedId);
+      if (entry.item.finding_id !== assignedId) rewrittenInlineComments += 1;
+      normalized[entry.index] = { ...entry.item, finding_id: assignedId };
+    }
+  }
+  return {
+    duplicateFindingIds: duplicateGroups.length,
+    output: { ...output, inline_comments: normalized },
+    rewrittenInlineComments
+  };
+}
+function groupedInlineComments(comments) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const [index, value] of comments.entries()) {
+    const item = recordValue(value);
+    const indexed = item ? indexedInlineComment(item, index) : void 0;
+    if (!indexed) continue;
+    const entries = groups.get(indexed.findingId) || [];
+    entries.push(indexed);
+    groups.set(indexed.findingId, entries);
+  }
+  return groups;
+}
+function indexedInlineComment(item, index) {
+  const rawBody = stringValue4(item.body);
+  const body = visibleReviewCommentBody(rawBody);
+  const line = positiveInteger2(item.line);
+  const path3 = stringValue4(item.path);
+  if (!body || !line || !path3) return void 0;
+  const startLine = positiveInteger2(item.start_line);
+  return {
+    findingId: effectiveReviewFindingId({
+      body,
+      explicitFindingId: item.finding_id,
+      line,
+      path: path3,
+      rawBody,
+      startLine
+    }),
+    index,
+    item,
+    stableKey: [path3, startLine || "", line, sideValue(item.side), body, stringValue4(item.severity)].map(String).join("\0")
+  };
+}
+function collisionFindingId(options) {
+  for (let attempt = 0; attempt <= options.occupiedIds.size; attempt += 1) {
+    const digest = createHash4("sha256").update(
+      [options.findingId, options.stableKey, options.occurrence, attempt].map(String).join("\0")
+    ).digest("hex").slice(0, 16);
+    const suffix = `:${digest}`;
+    const candidate = `${options.findingId.slice(0, 80 - suffix.length)}${suffix}`;
+    if (!options.occupiedIds.has(candidate)) return candidate;
+  }
+  throw new Error(`Unable to disambiguate review finding_id: ${options.findingId}.`);
+}
+function compareInlineComments(left, right) {
+  return compareStrings(left.stableKey, right.stableKey) || left.index - right.index;
+}
+function compareStrings(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function unchangedOutput(output) {
+  return { duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
+}
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function positiveInteger2(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : void 0;
+}
+function sideValue(value) {
+  return value === "LEFT" ? "LEFT" : "RIGHT";
+}
+function stringValue4(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 // src/runner/stage-results.ts
 async function stageRunResult({
   content,
@@ -54194,10 +54318,22 @@ async function stageRunResult({
 }) {
   logger.event("output.validation.start", { schema_id: definition.schemaId });
   const schema = loadStageSchema(definition.schemaFile);
-  const parsedOutput = await validateOutput({ content, schema, schemaId: definition.schemaId });
+  const validatedOutput = await validateOutput({ content, schema, schemaId: definition.schemaId });
   logger.event("output.validation.done", {
-    status: String(parsedOutput.status)
+    status: String(validatedOutput.status)
   });
+  const normalization = options.stage === "review-matrix" ? normalizeReviewMatrixOutput(validatedOutput) : {
+    duplicateFindingIds: 0,
+    output: validatedOutput,
+    rewrittenInlineComments: 0
+  };
+  const parsedOutput = normalization.output;
+  if (normalization.duplicateFindingIds > 0) {
+    logger.event("output.inline_comments.normalized", {
+      duplicate_finding_ids: normalization.duplicateFindingIds,
+      rewritten_inline_comments: normalization.rewrittenInlineComments
+    });
+  }
   const result = {
     commentBody: renderStageResultComment({
       context,
@@ -54856,9 +54992,6 @@ function discussionReplyToId(runner, context) {
   return sourceItem?.parentId || source.nodeId;
 }
 
-// src/runner/pr-review-publishing.ts
-import { createHash as createHash3 } from "node:crypto";
-
 // src/runner/pr-review-anchors.ts
 var hunkHeaderPattern = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 async function validateReviewFindingAnchors(options) {
@@ -55210,7 +55343,7 @@ function priorReviewFindingCandidates(context) {
   const candidates = [];
   for (const item of context.timeline) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
-    const findingId = parseReviewFindingMarker(item.body)?.id;
+    const findingId = reviewFindingMarkerId(item.body);
     const reviewThreadId = stringField4(item.reviewThreadId);
     const commentDatabaseId = reviewCommentDatabaseId(item.databaseId);
     if (!findingId || !reviewThreadId || !commentDatabaseId) continue;
@@ -55338,7 +55471,14 @@ function reviewFindingComment(value, index) {
       `review-matrix inline_comments[${index}].finding_id must match the allowed pattern.`
     );
   }
-  const findingId = normalizedExplicitFindingId || parseReviewFindingMarker(rawBody)?.id || generatedFindingId({ body, line, path: path3, startLine });
+  const findingId = effectiveReviewFindingId({
+    body,
+    explicitFindingId,
+    line,
+    path: path3,
+    rawBody,
+    startLine
+  });
   reviewComment.body = `${reviewFindingMarker(findingId)}
 ${body}`;
   return { body, findingId, reviewComment };
@@ -55351,10 +55491,6 @@ function reviewFindingMarker(id2) {
 }
 function reviewFindingUpdateMarker(options) {
   return `<!-- git-vibe:review-finding-update id=${options.id} status=${options.status} sha=${options.sha} -->`;
-}
-function parseReviewFindingMarker(body) {
-  const id2 = normalizedFindingId(markerAttributes2(body, "git-vibe:review-finding").id);
-  return id2 ? { id: id2 } : void 0;
 }
 function parseReviewFindingUpdateMarker(body) {
   const attributes = markerAttributes2(body, "git-vibe:review-finding-update");
@@ -55379,17 +55515,6 @@ function reviewFindingUpdateStatus(value) {
 }
 function reviewFindingUpdateKey(options) {
   return `${options.id}:${options.status}:${options.sha}`;
-}
-function visibleReviewCommentBody(body) {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
-}
-function generatedFindingId(options) {
-  const fingerprint = [options.path, options.startLine || "", options.line, options.body].map((part) => String(part).trim()).join("\0");
-  return `gv-${createHash3("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
-}
-function normalizedFindingId(value) {
-  const id2 = stringField4(value);
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id2) ? id2 : void 0;
 }
 function normalizedFindingMarkerValue(value) {
   const markerValue = stringField4(value);
@@ -56252,8 +56377,8 @@ function acceptedRiskMetadataCandidate(item, order, context, runner) {
 function acceptedRiskMetadataSource(item) {
   return {
     bodySha: acceptedRiskMetadataBodySha(item.body),
-    databaseId: stringValue4(item.databaseId),
-    id: stringValue4(item.id),
+    databaseId: stringValue5(item.databaseId),
+    id: stringValue5(item.id),
     kind: item.kind,
     sourceUrl: item.url || void 0
   };
@@ -56298,7 +56423,7 @@ function acceptedRiskAuditForCurrentRun(context, runner) {
   });
 }
 function auditMarkerAttemptMatches(marker, runner) {
-  const attempt = stringValue4(runner.workflowRunAttempt);
+  const attempt = stringValue5(runner.workflowRunAttempt);
   return !attempt || marker["run-attempt"] === attempt;
 }
 function parseAcceptedRiskAuditMarker(body) {
@@ -56311,7 +56436,7 @@ function trustedGitVibeTimelineItem(item) {
   if (["COLLABORATOR", "MEMBER", "OWNER"].includes(association)) return true;
   return trustedAutomationAuthors.has(String(item.author || "").toLowerCase());
 }
-function stringValue4(value) {
+function stringValue5(value) {
   const text = String(value ?? "").trim();
   return text || void 0;
 }

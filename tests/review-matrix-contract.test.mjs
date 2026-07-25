@@ -64,6 +64,7 @@ describe("review-matrix contract", () => {
     expect(schema).toMatchObject({
       properties: {
         inline_comments: {
+          description: expect.stringContaining("finding_id must be unique"),
           items: {
             properties: {
               line: { description: expect.stringContaining("final line") },
