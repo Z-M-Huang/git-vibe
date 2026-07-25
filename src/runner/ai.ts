@@ -18,6 +18,7 @@ export interface RunAiStageOptions {
   config: GitVibeConfig;
   contextFilesRoot?: string;
   cwd: string;
+  isolateWorkspace?: boolean;
   maxTurns: number;
   prompt: string;
   schema: JsonObject;

@@ -59,7 +59,7 @@ export async function runClaudeCodeSdkStage({
         ...(options.contextFilesRoot ? { additionalDirectories: [options.contextFilesRoot] } : {}),
         allowDangerouslySkipPermissions: true,
         allowedTools: mcpConfig.claudeAllowedTools,
-        cwd: options.cwd,
+        cwd: options.isolateWorkspace ? contextDir : options.cwd,
         effort: claudeEffort(profile),
         env,
         maxTurns: options.maxTurns,
@@ -74,7 +74,7 @@ export async function runClaudeCodeSdkStage({
         persistSession: false,
         strictMcpConfig: Object.keys(mcpConfig.claudeMcpServers).length > 0,
         systemPrompt: options.system,
-        tools: options.toolOverride,
+        tools: options.isolateWorkspace ? [] : options.toolOverride,
       },
       prompt: options.prompt,
     })) {

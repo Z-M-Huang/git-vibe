@@ -45,6 +45,22 @@ describe("review-matrix contract", () => {
       }),
     ).rejects.toThrow("AI output failed review-matrix.v1 validation");
 
+    await expect(
+      validateOutput({
+        content: JSON.stringify({ ...output, next_state: "review-passed" }),
+        schema,
+        schemaId: stageDefinitions["review-matrix"].schemaId,
+      }),
+    ).rejects.toThrow("AI output failed review-matrix.v1 validation");
+
+    await expect(
+      validateOutput({
+        content: JSON.stringify({ ...output, next_state: "blocked", status: "blocked" }),
+        schema,
+        schemaId: stageDefinitions["review-matrix"].schemaId,
+      }),
+    ).resolves.toMatchObject({ next_state: "blocked", status: "blocked" });
+
     expect(schema).toMatchObject({
       properties: {
         inline_comments: {

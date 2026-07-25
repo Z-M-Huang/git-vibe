@@ -80,6 +80,27 @@ describe("matrix finalizer safety sources", () => {
     expect(calls[1].input).not.toContain("Review the change for markhuang.ai");
     expect(calls[1].input).not.toContain("base prompt");
     expect(calls[1].input).not.toContain("system prompt");
+    const synthesisThread = globalThis.__gitVibeSdkMocks.codexStartThread.mock.calls[1][0];
+    expect(synthesisThread).toMatchObject({
+      networkAccessEnabled: false,
+      sandboxMode: "read-only",
+      webSearchMode: "disabled",
+    });
+    expect(synthesisThread.workingDirectory).not.toBe(cwd);
+    expect(synthesisThread.workingDirectory).toContain("git-vibe-codex-");
+    const synthesisConfig = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[1][0].config;
+    expect(synthesisConfig.features).toMatchObject({
+      apps: false,
+      browser_use: false,
+      browser_use_external: false,
+      computer_use: false,
+      image_generation: false,
+      in_app_browser: false,
+      multi_agent: false,
+      plugins: false,
+      shell_tool: false,
+      unified_exec: false,
+    });
   });
 });
 
@@ -197,6 +218,8 @@ describe("matrix finalizer synthesis boundary", () => {
     expect(request.options.tools).toEqual([]);
     expect(request.options.allowedTools).toEqual([]);
     expect(request.options).not.toHaveProperty("additionalDirectories");
+    expect(request.options.cwd).not.toBe(cwd);
+    expect(request.options.cwd).toContain("git-vibe-claude-");
   });
 });
 

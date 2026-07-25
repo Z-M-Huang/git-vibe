@@ -13,6 +13,22 @@
     "references",
     "next_state"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "completed" },
+          "findings": { "minItems": 1 }
+        },
+        "required": ["status", "findings"]
+      },
+      "then": {
+        "properties": {
+          "next_state": { "const": "changes-required" }
+        }
+      }
+    }
+  ],
   "properties": {
     "stage": { "type": "string", "const": "review-matrix" },
     "status": { "type": "string", "enum": ["completed", "blocked"] },

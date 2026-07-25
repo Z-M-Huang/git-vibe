@@ -437,6 +437,8 @@ function timelineUnits(item: TimelineItem, index: number): ContentUnit[] {
         id: item.id,
         kind: item.kind,
         parentId: item.parentId,
+        reviewThreadId: item.reviewThreadId,
+        reviewThreadIsOutdated: item.reviewThreadIsOutdated,
         updatedAt: bodyTimelineKind(item.kind) ? undefined : item.updatedAt,
       },
       sourceUrl: item.url,

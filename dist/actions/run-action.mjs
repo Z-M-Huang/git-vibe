@@ -10413,9 +10413,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -10726,9 +10726,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
@@ -10936,9 +10936,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js
+// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.2/node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -11079,6 +11079,7 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
+    var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -11107,6 +11108,11 @@ var require_fast_uri = __commonJS({
         } else {
           uri = "//" + uri;
         }
+      }
+      const authorityMatch = uri.match(AUTHORITY_PREFIX);
+      if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
+        parsed.error = "URI authority must not contain a literal backslash.";
+        malformedAuthorityOrPort = true;
       }
       const matches = uri.match(URI_PARSE);
       if (matches) {
@@ -11151,7 +11157,7 @@ var require_fast_uri = __commonJS({
         if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
           if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
             try {
-              parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
+              parsed.host = new URL("http://" + parsed.host).hostname;
             } catch (e) {
               parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
             }
@@ -36988,6 +36994,8 @@ function timelineUnits(item, index) {
         id: item.id,
         kind: item.kind,
         parentId: item.parentId,
+        reviewThreadId: item.reviewThreadId,
+        reviewThreadIsOutdated: item.reviewThreadIsOutdated,
         updatedAt: bodyTimelineKind(item.kind) ? void 0 : item.updatedAt
       },
       sourceUrl: item.url
@@ -57237,7 +57245,7 @@ async function runClaudeCodeSdkStage({
         ...options.contextFilesRoot ? { additionalDirectories: [options.contextFilesRoot] } : {},
         allowDangerouslySkipPermissions: true,
         allowedTools: mcpConfig.claudeAllowedTools,
-        cwd: options.cwd,
+        cwd: options.isolateWorkspace ? contextDir : options.cwd,
         effort: claudeEffort(profile),
         env,
         maxTurns: options.maxTurns,
@@ -57252,7 +57260,7 @@ async function runClaudeCodeSdkStage({
         persistSession: false,
         strictMcpConfig: Object.keys(mcpConfig.claudeMcpServers).length > 0,
         systemPrompt: options.system,
-        tools: options.toolOverride
+        tools: options.isolateWorkspace ? [] : options.toolOverride
       },
       prompt: options.prompt
     })) {
@@ -58051,7 +58059,7 @@ async function runCodexSdkStage({
     const sdk = new Codex({
       ...codexAuthOptions(codexEnv),
       codexPathOverride: codexExecutablePath(),
-      config: codexConfig(profile, mcpConfig.codexConfig),
+      config: codexConfig(profile, mcpConfig.codexConfig, options.isolateWorkspace),
       env: stringEnv(codexEnv.env)
     });
     options.logger?.event("ai.request.start", {
@@ -58071,9 +58079,10 @@ async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      sandboxMode: options.sandboxMode || "danger-full-access",
+      ...options.isolateWorkspace ? { networkAccessEnabled: false, webSearchMode: "disabled" } : {},
+      sandboxMode: options.isolateWorkspace ? "read-only" : options.sandboxMode || "danger-full-access",
       skipGitRepoCheck: true,
-      workingDirectory: options.cwd
+      workingDirectory: options.isolateWorkspace ? contextDir : options.cwd
     });
     const result = await thread.run(codexPrompt(options), {
       outputSchema: codexOutputSchema(options.schema)
@@ -58096,12 +58105,26 @@ async function runCodexSdkStage({
     rmSync3(contextDir, { force: true, recursive: true });
   }
 }
-function codexConfig(profile, mcpConfig) {
+function codexConfig(profile, mcpConfig, isolateWorkspace = false) {
   const reasoning = profile.reasoning;
   const summary = stringValue(reasoning?.summary);
   return {
     model_provider: "openai",
     ...mcpConfig,
+    ...isolateWorkspace ? {
+      features: {
+        apps: false,
+        browser_use: false,
+        browser_use_external: false,
+        computer_use: false,
+        image_generation: false,
+        in_app_browser: false,
+        multi_agent: false,
+        plugins: false,
+        shell_tool: false,
+        unified_exec: false
+      }
+    } : {},
     ...summary ? { model_reasoning_summary: summary } : {}
   };
 }
@@ -60936,6 +60959,7 @@ async function runMatrixFinalizerResult({
     content: await runAiStage({
       ...aiRunOptions,
       contextFilesRoot: void 0,
+      isolateWorkspace: true,
       profileName: plan.synthesizerProfile,
       prompt,
       system: synthesizerSystemPrompt(),

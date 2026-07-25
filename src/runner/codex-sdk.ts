@@ -56,7 +56,7 @@ export async function runCodexSdkStage({
     const sdk = new Codex({
       ...codexAuthOptions(codexEnv),
       codexPathOverride: codexExecutablePath(),
-      config: codexConfig(profile, mcpConfig.codexConfig),
+      config: codexConfig(profile, mcpConfig.codexConfig, options.isolateWorkspace),
       env: stringEnv(codexEnv.env),
     });
 
@@ -78,9 +78,14 @@ export async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      sandboxMode: options.sandboxMode || "danger-full-access",
+      ...(options.isolateWorkspace
+        ? { networkAccessEnabled: false, webSearchMode: "disabled" as const }
+        : {}),
+      sandboxMode: options.isolateWorkspace
+        ? "read-only"
+        : options.sandboxMode || "danger-full-access",
       skipGitRepoCheck: true,
-      workingDirectory: options.cwd,
+      workingDirectory: options.isolateWorkspace ? contextDir : options.cwd,
     });
     const result = await thread.run(codexPrompt(options), {
       outputSchema: codexOutputSchema(options.schema),
@@ -107,12 +112,29 @@ export async function runCodexSdkStage({
 function codexConfig(
   profile: Record<string, unknown>,
   mcpConfig: NonNullable<CodexOptions["config"]>,
+  isolateWorkspace = false,
 ): NonNullable<CodexOptions["config"]> {
   const reasoning = profile.reasoning as Record<string, unknown> | undefined;
   const summary = stringValue(reasoning?.summary);
   return {
     model_provider: "openai",
     ...mcpConfig,
+    ...(isolateWorkspace
+      ? {
+          features: {
+            apps: false,
+            browser_use: false,
+            browser_use_external: false,
+            computer_use: false,
+            image_generation: false,
+            in_app_browser: false,
+            multi_agent: false,
+            plugins: false,
+            shell_tool: false,
+            unified_exec: false,
+          },
+        }
+      : {}),
     ...(summary ? { model_reasoning_summary: summary } : {}),
   };
 }

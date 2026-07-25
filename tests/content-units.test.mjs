@@ -162,6 +162,45 @@ describe("file-backed context prompt packing", () => {
   });
 });
 
+describe("file-backed review thread metadata", () => {
+  it("indexes thread identity and outdated state for review comments", () => {
+    const context = contextPacket();
+    context.timeline = [
+      {
+        author: "reviewer",
+        body: "Outdated feedback",
+        createdAt: "2026-01-01T00:00:00Z",
+        id: "review-comment-1",
+        kind: "pull-request-review-comment",
+        reviewThreadId: "thread-1",
+        reviewThreadIsOutdated: true,
+        url: "https://github.com/example/repo/pull/12#discussion_r1",
+      },
+    ];
+    const rootDir = mkdtempSync(join(tmpdir(), "git-vibe-context-files-"));
+    try {
+      const fileContext = writePromptContextFiles({ context, rootDir, stage: "investigate" });
+      const indexUnit = readJsonLines(fileContext.index.path).find(
+        (unit) => unit.kind === "timeline",
+      );
+      const manifest =
+        /** @type {{ units: import("../src/runner/content-units.ts").PromptContextUnitFile[] }} */ (
+          JSON.parse(readFileSync(fileContext.manifest.path, "utf8"))
+        );
+      const manifestUnit = manifest.units.find((unit) => unit.kind === "timeline");
+
+      for (const unit of [indexUnit, manifestUnit]) {
+        expect(unit.metadata).toMatchObject({
+          reviewThreadId: "thread-1",
+          reviewThreadIsOutdated: true,
+        });
+      }
+    } finally {
+      rmSync(rootDir, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("large file-backed context prompt packing", () => {
   it("keeps a 400-file prompt compact while every patch remains index-addressable", () => {
     const context = largePullRequestContext(400);

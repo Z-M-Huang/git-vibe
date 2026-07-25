@@ -131,6 +131,7 @@ async function runMatrixFinalizerResult({
     content: await runAiStage({
       ...aiRunOptions,
       contextFilesRoot: undefined,
+      isolateWorkspace: true,
       profileName: plan.synthesizerProfile,
       prompt,
       system: synthesizerSystemPrompt(),
