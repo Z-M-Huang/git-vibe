@@ -68,7 +68,7 @@ export async function runCodexSmokeTest({ cwd, dependencies = defaultDependencie
       ...(env.GITVIBE_CODEX_PATH ? { codexPathOverride: env.GITVIBE_CODEX_PATH } : {}),
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
-      config: { model_provider: "openai" },
+      config: { features: { plugins: false }, model_provider: "openai" },
       env: stringEnv({ ...config.env, CODEX_HOME: codexHome }),
     });
     const thread = codex.startThread({

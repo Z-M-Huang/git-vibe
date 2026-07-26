@@ -99,7 +99,7 @@ ai:
         apiKey: "test-key",
         baseUrl: "https://codex-proxy.example/v1",
         codexPathOverride: "/runner/codex",
-        config: { model_provider: "openai" },
+        config: { features: { plugins: false }, model_provider: "openai" },
       }),
     );
     expect(startThread).toHaveBeenCalledWith(

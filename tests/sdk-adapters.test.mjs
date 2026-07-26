@@ -49,7 +49,7 @@ describe("Codex and Claude SDK adapter routing", () => {
         apiKey: "test-key",
         baseUrl: "https://codex-proxy.example/v1",
         codexPathOverride: codexPath,
-        config: { model_provider: "openai" },
+        config: { features: { plugins: false }, model_provider: "openai" },
         env: expect.any(Object),
       }),
     );
@@ -81,7 +81,7 @@ describe("Codex and Claude SDK adapter routing", () => {
     await runAiStage(stageOptions({ cwd, config: codexConfig(), sandboxMode: "read-only" }));
 
     const constructorOptions = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0];
-    expect(constructorOptions.config.features?.plugins).toBeUndefined();
+    expect(constructorOptions.config.features?.plugins).toBe(false);
     expect(constructorOptions.config.model_provider).toBe("openai");
     const threadOptions = globalThis.__gitVibeSdkMocks.codexStartThread.mock.calls[0][0];
     expect(threadOptions).toMatchObject({
@@ -196,7 +196,11 @@ describe("Codex SDK adapter logging", () => {
 
     expect(globalThis.__gitVibeSdkMocks.codexConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: { model_provider: "openai", model_reasoning_summary: "concise" },
+        config: {
+          features: { plugins: false },
+          model_provider: "openai",
+          model_reasoning_summary: "concise",
+        },
       }),
     );
     expect(globalThis.__gitVibeSdkMocks.codexStartThread).toHaveBeenCalledWith(

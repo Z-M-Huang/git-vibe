@@ -119,9 +119,9 @@ function codexConfig(
   return {
     model_provider: "openai",
     ...mcpConfig,
-    ...(isolateWorkspace
-      ? {
-          features: {
+    features: {
+      ...(isolateWorkspace
+        ? {
             apps: false,
             browser_use: false,
             browser_use_external: false,
@@ -129,12 +129,12 @@ function codexConfig(
             image_generation: false,
             in_app_browser: false,
             multi_agent: false,
-            plugins: false,
             shell_tool: false,
             unified_exec: false,
-          },
-        }
-      : {}),
+          }
+        : {}),
+      plugins: false,
+    },
     ...(summary ? { model_reasoning_summary: summary } : {}),
   };
 }

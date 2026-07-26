@@ -41,7 +41,7 @@ describe("SDK MCP config", () => {
     await runAiStage(stageOptions({ cwd, config: codexConfigWithMcp() }));
 
     const constructorOptions = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0];
-    expect(constructorOptions.config.features?.plugins).toBeUndefined();
+    expect(constructorOptions.config.features?.plugins).toBe(false);
     expect(constructorOptions.config.model_provider).toBe("openai");
     expect(constructorOptions.config.mcp_servers.dense_mem).toMatchObject({
       args: [join(cwd, "dist/actions/mcp-gateway.js")],
@@ -114,7 +114,9 @@ describe("SDK MCP config warnings", () => {
     await runAiStage(stageOptions({ config: optionalBrokenMcpConfig(), cwd, logger }));
 
     expect(globalThis.__gitVibeSdkMocks.codexConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({ config: { model_provider: "openai" } }),
+      expect.objectContaining({
+        config: { features: { plugins: false }, model_provider: "openai" },
+      }),
     );
     expect(logger.event).toHaveBeenCalledWith("mcp.sdk_config.warning", {
       reason: "ai.mcp.servers.dense_mem.command must be configured for stdio MCP servers.",
