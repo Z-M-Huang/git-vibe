@@ -5,9 +5,11 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "$script_dir/.." && pwd)"
 
-export_path() {
+try_export_path() {
   local executable="$1"
-  "$executable" --version >/dev/null
+  if ! "$executable" --version >/dev/null 2>&1; then
+    return 1
+  fi
   if [ -n "${GITHUB_ENV:-}" ]; then
     echo "GITVIBE_CODEX_PATH=$executable" >> "$GITHUB_ENV"
   fi
@@ -55,8 +57,10 @@ install_codex() {
   local lock_dir="$install_dir.lock"
 
   if [ -x "$executable" ]; then
-    export_path "$executable"
-    exit 0
+    if try_export_path "$executable"; then
+      exit 0
+    fi
+    echo "::warning::Replacing unusable cached Codex executable at $executable."
   fi
 
   mkdir -p "$root"
@@ -71,12 +75,14 @@ install_codex() {
       GITVIBE_CODEX_TMP_DIR=""
       rmdir "$lock_dir"
       GITVIBE_CODEX_LOCK_DIR=""
-      export_path "$executable"
-      exit 0
+      if try_export_path "$executable"; then
+        exit 0
+      fi
+      echo "::error::Installed Codex executable failed validation: $executable"
+      exit 1
     fi
 
-    if [ -x "$executable" ]; then
-      export_path "$executable"
+    if [ -x "$executable" ] && try_export_path "$executable"; then
       exit 0
     fi
     sleep 1
@@ -91,18 +97,26 @@ if [ -n "${GITVIBE_CODEX_PATH:-}" ]; then
     echo "::error::GITVIBE_CODEX_PATH is not executable: $GITVIBE_CODEX_PATH"
     exit 1
   fi
-  export_path "$GITVIBE_CODEX_PATH"
-  exit 0
+  if try_export_path "$GITVIBE_CODEX_PATH"; then
+    exit 0
+  fi
+  echo "::error::GITVIBE_CODEX_PATH failed Codex executable validation: $GITVIBE_CODEX_PATH"
+  exit 1
 fi
 
 if resolved="$(node "$repo_dir/scripts/resolve-codex-path.mjs" 2>/dev/null)" && [ -n "$resolved" ]; then
-  export_path "$resolved"
-  exit 0
+  if try_export_path "$resolved"; then
+    exit 0
+  fi
+  echo "::warning::Ignoring unusable auto-resolved Codex executable at $resolved."
 fi
 
 if command -v codex >/dev/null 2>&1; then
-  export_path "$(command -v codex)"
-  exit 0
+  global_codex="$(command -v codex)"
+  if try_export_path "$global_codex"; then
+    exit 0
+  fi
+  echo "::warning::Ignoring unusable Codex executable on PATH at $global_codex."
 fi
 
 case "$(uname -s)" in

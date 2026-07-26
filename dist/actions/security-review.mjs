@@ -53596,10 +53596,7 @@ async function runCodexSdkStage({
       skipGitRepoCheck: true,
       workingDirectory: options.isolateWorkspace ? contextDir : options.cwd
     });
-    const result = await thread.run(codexPrompt(options), {
-      outputSchema: codexOutputSchema(options.schema)
-    });
-    for (const item of result.items) logCodexItem(item, options.logger);
+    const result = await runCodexThread(thread, options);
     const validated = await validatedSdkOutput({
       content: result.finalResponse,
       schema: options.schema,
@@ -53695,6 +53692,27 @@ function stringEnv(env) {
   return Object.fromEntries(
     Object.entries(env).filter((entry) => typeof entry[1] === "string")
   );
+}
+async function runCodexThread(thread, options) {
+  const { events } = await thread.runStreamed(codexPrompt(options), {
+    outputSchema: codexOutputSchema(options.schema)
+  });
+  let finalResponse = "";
+  let usage = null;
+  for await (const event of events) {
+    if (event.type === "item.completed") {
+      logCodexItem(event.item, options.logger);
+      if (event.item.type === "agent_message") finalResponse = event.item.text;
+    } else if (event.type === "turn.completed") {
+      usage = event.usage;
+    } else if (event.type === "turn.failed") {
+      throw new Error(event.error.message);
+    } else if (event.type === "error") {
+      options.logger?.event("ai.codex.error", { error: summarizeError(event.message) });
+      throw new Error(event.message);
+    }
+  }
+  return { finalResponse, usage };
 }
 function logCodexItem(item, logger) {
   if (item.type === "command_execution") {

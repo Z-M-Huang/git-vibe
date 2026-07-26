@@ -144,6 +144,65 @@ describe("Claude SDK adapter routing", () => {
   });
 });
 
+describe("Codex SDK adapter streaming", () => {
+  it("logs completed Codex items before the turn finishes", async () => {
+    const cwd = workspace();
+    const logger = { event: vi.fn() };
+    const output = validValidateOutput({ summary: "Streamed." });
+    let releaseTurn;
+    const turnBlocked = new Promise((resolve) => {
+      releaseTurn = resolve;
+    });
+
+    async function* events() {
+      yield {
+        item: {
+          command: "git diff --stat",
+          exit_code: 0,
+          id: "command",
+          status: "completed",
+          type: "command_execution",
+        },
+        type: "item.completed",
+      };
+      await turnBlocked;
+      yield {
+        item: {
+          id: "response",
+          text: JSON.stringify(output),
+          type: "agent_message",
+        },
+        type: "item.completed",
+      };
+      yield {
+        type: "turn.completed",
+        usage: { input_tokens: 1, output_tokens: 2 },
+      };
+    }
+
+    globalThis.__gitVibeSdkMocks.codexRun.mockResolvedValueOnce({ events: events() });
+    const stagePromise = runAiStage(stageOptions({ config: codexConfig(), cwd, logger }));
+
+    try {
+      await vi.waitFor(() => {
+        expect(logger.event).toHaveBeenCalledWith(
+          "ai.codex.command",
+          expect.objectContaining({ command: "git diff --stat", status: "completed" }),
+        );
+      });
+      expect(logger.event).not.toHaveBeenCalledWith("ai.request.done", expect.anything());
+    } finally {
+      releaseTurn();
+    }
+
+    await expect(stagePromise).resolves.toBe(JSON.stringify(output));
+    expect(logger.event).toHaveBeenCalledWith(
+      "ai.request.done",
+      expect.objectContaining({ input_tokens: 1, output_tokens: 2 }),
+    );
+  });
+});
+
 describe("Codex SDK adapter logging", () => {
   it("logs Codex SDK item variants and supports reasoning summaries without effort", async () => {
     const cwd = workspace();

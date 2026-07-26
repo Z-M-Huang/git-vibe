@@ -93,7 +93,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - id: security
         uses: ./.git-vibe/actions/security-review
@@ -132,7 +132,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - id: plan
         uses: ./.git-vibe/actions/plan-stage
@@ -167,7 +167,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - name: Prepare Claude Code executable
         if: ${{ needs.plan-materialize.outputs.finalizer-adapter == 'claude-code-sdk' }}

@@ -93,7 +93,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - id: security
         uses: ./.git-vibe/actions/security-review
@@ -137,7 +137,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - id: plan
         uses: ./.git-vibe/actions/plan-stage
@@ -179,7 +179,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - name: Prepare Claude Code executable
         if: ${{ fromJSON(needs.plan-investigate.outputs.adapters)[format('{0}', matrix.index)] == 'claude-code-sdk' }}
@@ -238,7 +238,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
       - name: Prepare Claude Code executable
         if: ${{ needs.plan-investigate.outputs.finalizer-adapter == 'claude-code-sdk' }}

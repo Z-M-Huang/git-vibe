@@ -18,7 +18,7 @@ documentation lives in the
 
 ## Tooling
 
-- Runtime: Node `22`.
+- Runtime: Node `24`.
 - Package manager version: `pnpm@10.33.3`.
 - Package manager: `pnpm` via Corepack.
 - If `pnpm` is not on `PATH`, use `corepack pnpm`.
