@@ -36,6 +36,9 @@ describe("pull request review publishing thread reconciliation", () => {
     expect(reply.body.body).toContain("This issue still exists after commit `abcdef123456`.");
     expect(reply.body.body).toContain("This still misses `pull_request.labeled` handling.");
     expect(reviewRequest(client).body.comments).toBeUndefined();
+    expect(
+      client.request.mock.invocationCallOrder[requestCalls(client).indexOf(reviewRequest(client))],
+    ).toBeLessThan(client.request.mock.invocationCallOrder[requestCalls(client).indexOf(reply)]);
     expect(requestCalls(client).map((request) => request.path)).not.toContain("/user");
     expect(client.graphql).not.toHaveBeenCalled();
   });
@@ -73,6 +76,25 @@ describe("pull request review publishing thread reconciliation", () => {
 });
 
 describe("pull request review publishing thread resolution failures", () => {
+  it("does not mutate prior threads when the completed review cannot be published", async () => {
+    const client = createClient({ reviewError: new Error("Review publication failed") });
+
+    await expect(
+      publishStageResultComment({
+        client,
+        context: context([priorReviewFinding()]),
+        logger: createLogger(),
+        parsedOutput: { ...output(), next_state: "review-passed", stage: "review-matrix" },
+        runner: runner(),
+      }),
+    ).rejects.toThrow("Review publication failed");
+
+    expect(requestCalls(client).map((request) => request.path)).not.toContain(
+      "/repos/example/repo/pulls/12/comments/123/replies",
+    );
+    expect(client.graphql).not.toHaveBeenCalled();
+  });
+
   it("keeps publishing when resolving an outdated GitVibe thread is forbidden", async () => {
     const client = createClient({
       graphqlError: new Error(
@@ -359,6 +381,13 @@ function createClient(options = {}) {
       return {};
     }),
     request: vi.fn(async (request) => {
+      if (
+        options.reviewError &&
+        request.method === "POST" &&
+        request.path.endsWith("/pulls/12/reviews")
+      ) {
+        throw options.reviewError;
+      }
       if (request.path !== "/user") return {};
       if (options.userLookupError) throw new Error("Resource not accessible by integration");
       return { login: "git-vibe" };

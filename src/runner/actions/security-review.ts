@@ -42,6 +42,12 @@ export async function securityReview(runtime: SecurityReviewRuntime = {}): Promi
       maxTurns: 1,
       prNumber: target.prNumber,
       repository,
+      review:
+        stage === "review-matrix"
+          ? {
+              targetSha: envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || undefined,
+            }
+          : undefined,
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
       stageTimeoutMinutes: numberEnv(env, "GITVIBE_STAGE_TIMEOUT_MINUTES", 10),
@@ -139,6 +145,26 @@ function writeOutputs(
   writeOutput(env.GITHUB_OUTPUT, "allowed", result.allowed ? "true" : "false", appendFile);
   writeOutput(env.GITHUB_OUTPUT, "summary", result.summary, appendFile);
   writeOutput(env.GITHUB_OUTPUT, "status", result.status, appendFile);
+  if (result.inputSafetyDigest) {
+    writeOutput(env.GITHUB_OUTPUT, "input-safety-digest", result.inputSafetyDigest, appendFile);
+  }
+  if (result.reviewScope) {
+    writeOutput(env.GITHUB_OUTPUT, "base-sha", result.reviewScope.baseSha, appendFile);
+    writeOutput(
+      env.GITHUB_OUTPUT,
+      "checkpoint-sha",
+      result.reviewScope.checkpointSha || "",
+      appendFile,
+    );
+    writeOutput(
+      env.GITHUB_OUTPUT,
+      "head-repository",
+      result.reviewScope.headRepository,
+      appendFile,
+    );
+    writeOutput(env.GITHUB_OUTPUT, "snapshot-sha", result.reviewScope.snapshotSha, appendFile);
+    writeOutput(env.GITHUB_OUTPUT, "target-sha", result.reviewScope.targetSha, appendFile);
+  }
   if (result.result?.resultFile) {
     writeOutput(env.GITHUB_OUTPUT, "result-file", result.result.resultFile, appendFile);
   }

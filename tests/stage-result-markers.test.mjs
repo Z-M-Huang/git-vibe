@@ -41,6 +41,23 @@ describe("stage result markers", () => {
     expect(stageResultStatus("**Status:** blocked")).toBe("");
     expect(stageResultStatus("## GitVibe Result")).toBe("");
   });
+
+  it("parses immutable review checkpoint metadata", () => {
+    const baseSha = "a".repeat(40);
+    const headSha = "b".repeat(40);
+    const snapshotSha = "c".repeat(64);
+    const body = `<!-- git-vibe:stage-result stage=review-matrix artifact=pull-request number=12 review-version=1 base-sha=${baseSha} head-sha=${headSha} snapshot-sha=${snapshotSha} -->`;
+
+    expect(parseStageResultMarker(body)).toMatchObject({
+      artifact: "pull-request",
+      baseSha,
+      headSha,
+      number: "12",
+      reviewVersion: "1",
+      snapshotSha,
+      stage: "review-matrix",
+    });
+  });
 });
 
 describe("accepted-risk metadata markers", () => {

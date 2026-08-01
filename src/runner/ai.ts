@@ -21,6 +21,7 @@ export interface RunAiStageOptions {
   isolateWorkspace?: boolean;
   maxTurns: number;
   prompt: string;
+  profileContextCwd?: string;
   schema: JsonObject;
   schemaId: string;
   stage: Stage;
@@ -46,7 +47,7 @@ async function runAiStageWithProfile(
   const profile = activeProfileByName(options.config, profileName);
   const adapter = adapterName(profile, `ai.profiles.${profileName}`);
   const system = systemWithProfileContext({
-    cwd: options.cwd,
+    cwd: options.profileContextCwd || options.cwd,
     profile,
     profileName,
     system: options.system,

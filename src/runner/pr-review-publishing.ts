@@ -14,6 +14,7 @@ import {
   type PullRequestReviewComment,
   updatePullRequestReview,
 } from "./pr-review-github.js";
+import { assertCurrentReviewTarget } from "./review-target.js";
 
 interface ReviewFindingComment {
   body: string;
@@ -61,9 +62,10 @@ export async function publishPullRequestReviewResult(options: {
   if (!shouldPublishPullRequestReview(options)) return false;
 
   const findings = reviewFindingComments(options.parsedOutput.inline_comments);
-  const newFindings = shouldReconcileReviewFindings(options.parsedOutput)
-    ? (await reconcileReviewFindings({ ...options, findings })).newFindings
-    : findings;
+  const reconciliation = shouldReconcileReviewFindings(options.parsedOutput)
+    ? await planReviewFindingReconciliation({ ...options, findings })
+    : undefined;
+  const newFindings = reconciliation?.newFindings || findings;
   const validated = await validateReviewFindingAnchors({
     client: options.client,
     findings: newFindings,
@@ -81,6 +83,7 @@ export async function publishPullRequestReviewResult(options: {
     workflowRunUrl: options.runner.workflowRunUrl,
   });
   const existingReview = await editableReviewForStageResult({ ...options, comments });
+  await assertCurrentReviewTarget(options);
   if (existingReview) {
     options.logger.event("github.pr.review.update.start", {
       pull_request: options.context.artifact.number,
@@ -100,25 +103,26 @@ export async function publishPullRequestReviewResult(options: {
       review: existingReview.reviewId,
       run: workflowRunIdFromUrl(options.runner.workflowRunUrl),
     });
-    return true;
+  } else {
+    options.logger.event("github.pr.review.start", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number,
+    });
+    await createPullRequestReview({
+      body,
+      client: options.client,
+      comments,
+      commitId: options.context.reviewScope?.targetSha,
+      pullNumber: options.context.artifact.number,
+      repository: options.runner.repository,
+      token: options.runner.token,
+    });
+    options.logger.event("github.pr.review.done", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number,
+    });
   }
-
-  options.logger.event("github.pr.review.start", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number,
-  });
-  await createPullRequestReview({
-    body,
-    client: options.client,
-    comments,
-    pullNumber: options.context.artifact.number,
-    repository: options.runner.repository,
-    token: options.runner.token,
-  });
-  options.logger.event("github.pr.review.done", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number,
-  });
+  await reconciliation?.apply();
   return true;
 }
 
@@ -246,19 +250,20 @@ async function authenticatedGitHubLogin(options: {
   return login;
 }
 
-async function reconcileReviewFindings(options: {
+async function planReviewFindingReconciliation(options: {
   client: GitHubClient;
   context: ContextPacket;
   findings: ReviewFindingComment[];
   logger: StageLogger;
+  parsedOutput: JsonObject;
   runner: RunnerOptions;
-}): Promise<{ newFindings: ReviewFindingComment[] }> {
+}): Promise<{ apply: () => Promise<void>; newFindings: ReviewFindingComment[] }> {
   const priorFindings = await priorReviewFindings(options);
-  if (!priorFindings.size) return { newFindings: options.findings };
-
   const commit = reviewedCommit(options.context);
   const currentFindingIds = new Set(options.findings.map((finding) => finding.findingId));
+  const resolvedFindingIds = new Set(stringItems(options.parsedOutput.resolved_finding_ids));
   const newFindings: ReviewFindingComment[] = [];
+  const updates: Array<() => Promise<void>> = [];
 
   for (const finding of options.findings) {
     const prior = priorFindings.get(finding.findingId);
@@ -266,33 +271,51 @@ async function reconcileReviewFindings(options: {
       newFindings.push(finding);
       continue;
     }
-    await replyToPriorReviewFinding({
-      ...options,
-      body: stillPresentReviewFindingReply(finding.body, commit.label),
-      commit,
-      prior,
-      status: "still-present",
-    });
+    updates.push(() =>
+      replyToPriorReviewFinding({
+        ...options,
+        body: stillPresentReviewFindingReply(finding.body, commit.label),
+        commit,
+        prior,
+        status: "still-present",
+      }),
+    );
   }
 
   for (const prior of priorFindings.values()) {
     if (currentFindingIds.has(prior.findingId)) continue;
-    await replyToPriorReviewFinding({
-      ...options,
-      body: outdatedReviewFindingReply(commit.label),
-      commit,
-      prior,
-      status: "outdated",
-    });
-    await resolveReviewThread({
-      client: options.client,
-      logger: options.logger,
-      reviewThreadId: prior.reviewThreadId,
-      token: options.runner.token,
+    if (options.context.reviewScope?.checkpointSha && !resolvedFindingIds.has(prior.findingId)) {
+      options.logger.event("github.pr.review_thread.reconcile.skip", {
+        finding: prior.findingId,
+        reason: "incremental-review-carried",
+      });
+      continue;
+    }
+    updates.push(async () => {
+      await replyToPriorReviewFinding({
+        ...options,
+        body: outdatedReviewFindingReply(commit.label),
+        commit,
+        prior,
+        status: "outdated",
+      });
+      await resolveReviewThread({
+        client: options.client,
+        logger: options.logger,
+        reviewThreadId: prior.reviewThreadId,
+        token: options.runner.token,
+      });
     });
   }
 
-  return { newFindings };
+  return {
+    apply: async () => {
+      if (!updates.length) return;
+      await assertCurrentReviewTarget(options);
+      for (const update of updates) await update();
+    },
+    newFindings,
+  };
 }
 
 async function priorReviewFindings(options: {

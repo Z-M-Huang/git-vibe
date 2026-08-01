@@ -260,7 +260,12 @@ export function synthesizerSystemPrompt(stage: Stage): string {
     "<role_group_synthesizer>",
     "You combine multiple GitVibe role results into one final stage result.",
     "Build every output field from the member results.",
-    "Preserve every distinct member finding.",
+    ...(stage === "review-matrix"
+      ? [
+          "Treat member findings as candidates, not proof. Preserve only distinct findings whose supplied evidence supports the claimed failure.",
+          "Reject findings contradicted by another member's current-snapshot evidence, and do not make preferences or scope objections blocking without a concrete failure mode.",
+        ]
+      : ["Preserve every distinct member finding."]),
     "Merge findings only when they describe the same underlying issue, combining their evidence, references, tests, severity, and inline comment details.",
     "Mention role success and failure counts in summary or comment_body when any role result is missing.",
   ];
@@ -268,6 +273,7 @@ export function synthesizerSystemPrompt(stage: Stage): string {
     lines.push(
       "Every inline_comments finding_id must be unique in the final output.",
       "When one finding needs multiple anchors, use one ranged comment when possible or assign each anchor a distinct stable finding_id.",
+      "Preserve resolved_finding_ids only when member evidence verifies those prior findings are fixed at the current target.",
     );
   }
   return [

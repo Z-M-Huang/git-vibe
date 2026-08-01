@@ -28,8 +28,9 @@ export async function stageRunResult({
   });
   const normalization =
     options.stage === "review-matrix"
-      ? normalizeReviewMatrixOutput(validatedOutput)
+      ? normalizeReviewMatrixOutput(validatedOutput, context)
       : {
+          carriedFindings: 0,
           duplicateFindingIds: 0,
           output: validatedOutput,
           rewrittenInlineComments: 0,
@@ -39,6 +40,11 @@ export async function stageRunResult({
     logger.event("output.inline_comments.normalized", {
       duplicate_finding_ids: normalization.duplicateFindingIds,
       rewritten_inline_comments: normalization.rewrittenInlineComments,
+    });
+  }
+  if (normalization.carriedFindings > 0) {
+    logger.event("output.review_findings.carried", {
+      findings: normalization.carriedFindings,
     });
   }
   const result: StageRunResult = {

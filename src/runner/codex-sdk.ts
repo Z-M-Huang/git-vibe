@@ -80,7 +80,7 @@ export async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      ...(options.isolateWorkspace
+      ...(options.isolateWorkspace || options.sandboxMode === "read-only"
         ? { networkAccessEnabled: false, webSearchMode: "disabled" as const }
         : {}),
       sandboxMode: options.isolateWorkspace

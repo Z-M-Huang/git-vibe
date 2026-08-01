@@ -105,6 +105,18 @@ describe("SDK MCP config", () => {
     });
     expect(existsSync(gatewayPath)).toBe(false);
   });
+
+  it("disables MCP when the caller supplies an explicit tool set", async () => {
+    const cwd = workspace();
+    process.env.GITVIBE_MCP_ENV_JSON = JSON.stringify({ DENSE_TOKEN: "secret-token" });
+
+    await runAiStage(
+      stageOptions({ config: codexConfigWithMcp(), cwd, toolOverride: ["Read", "Glob", "Grep"] }),
+    );
+
+    const config = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0].config;
+    expect(config.mcp_servers).toBeUndefined();
+  });
 });
 
 describe("SDK MCP config warnings", () => {
@@ -125,7 +137,7 @@ describe("SDK MCP config warnings", () => {
   });
 });
 
-function stageOptions({ config, cwd, logger }) {
+function stageOptions({ config, cwd, logger, toolOverride }) {
   return {
     config,
     cwd,
@@ -137,6 +149,7 @@ function stageOptions({ config, cwd, logger }) {
     stage: "validate",
     stageDefinition: { schemaFile: "validate.v1.schema.json", schemaId: "validate.v1" },
     system: "System",
+    toolOverride,
   };
 }
 

@@ -23,6 +23,7 @@ import {
   type StageResultLink,
 } from "./result-comments.js";
 import type { ContextPacket, JsonObject, RunnerOptions, SourceComment } from "../shared/types.js";
+import { assertCurrentReviewTarget } from "./review-target.js";
 
 export interface StagePublishingOptions {
   client: GitHubClient;
@@ -47,6 +48,7 @@ const staleTransientStatusCommentAgeMs = 30 * 60 * 1000;
 
 export async function publishStageResultComment(options: StagePublishingOptions): Promise<void> {
   assertPullRequestReviewResultPublishable(options);
+  await assertCurrentReviewTarget(options);
   await cleanupStageStatusComments(options);
   const body = renderStageResultComment({
     context: options.context,
@@ -82,6 +84,7 @@ export async function publishStageStartComment(
 }
 
 export async function applyStageLabelTransition(options: StagePublishingOptions): Promise<void> {
+  await assertCurrentReviewTarget(options);
   if (options.context.artifact.type === "discussion") {
     await applyDiscussionStageLabelTransition(options);
     return;

@@ -11,7 +11,10 @@ Review a GitVibe-produced pull request or merge-preparation change. Focus on bug
 - Reject over-engineering requests as non-blocking unless the current code proves a concrete correctness, security, regression, or maintainability risk.
 - Separate blocking issues from non-blocking notes in the `comment_body`.
 - For pull request review findings, prefer `inline_comments` on exact changed diff lines so GitVibe can publish GitHub-native inline PR review comments.
-- Use read-only tools only. Do not edit files, create branches, push, or open PRs.
+- Use read-only repository inspection only. Do not edit files, create branches, push, or open PRs.
+- Treat `reviewScope.targetSha` and the repository-context `HEAD` as an invariant. Stop with `blocked` if they differ.
+- When `reviewScope.checkpointSha` is present, changed-file patches cover `checkpointSha..targetSha`. Otherwise they cover the full pull request. The immutable repository workspace contains the complete tree at `targetSha` for validating definitions and unchanged surrounding code.
+- Existing unresolved GitVibe review threads are carried obligations. Reuse their `finding_id` when still present; list an id in `resolved_finding_ids` only after current-target evidence proves the issue is fixed.
 
 ## Completion Bar
 

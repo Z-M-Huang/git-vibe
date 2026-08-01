@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import { effectiveReviewFindingId, visibleReviewCommentBody } from "./review-finding-ids.js";
-import type { JsonObject } from "../shared/types.js";
+import {
+  effectiveReviewFindingId,
+  reviewFindingMarkerId,
+  visibleReviewCommentBody,
+} from "./review-finding-ids.js";
+import type { ContextPacket, JsonObject } from "../shared/types.js";
 
 interface IndexedInlineComment {
   findingId: string;
@@ -10,12 +14,20 @@ interface IndexedInlineComment {
 }
 
 export interface ReviewMatrixOutputNormalization {
+  carriedFindings: number;
   duplicateFindingIds: number;
   output: JsonObject;
   rewrittenInlineComments: number;
 }
 
-export function normalizeReviewMatrixOutput(output: JsonObject): ReviewMatrixOutputNormalization {
+export function normalizeReviewMatrixOutput(
+  output: JsonObject,
+  context?: ContextPacket,
+): ReviewMatrixOutputNormalization {
+  return carryIncrementalFindings(normalizeDuplicateFindingIds(output), context);
+}
+
+function normalizeDuplicateFindingIds(output: JsonObject): ReviewMatrixOutputNormalization {
   if (!Array.isArray(output.inline_comments)) return unchangedOutput(output);
   const comments = output.inline_comments;
   const groups = groupedInlineComments(comments);
@@ -48,10 +60,77 @@ export function normalizeReviewMatrixOutput(output: JsonObject): ReviewMatrixOut
     }
   }
   return {
+    carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
     rewrittenInlineComments,
   };
+}
+
+function carryIncrementalFindings(
+  normalization: ReviewMatrixOutputNormalization,
+  context: ContextPacket | undefined,
+): ReviewMatrixOutputNormalization {
+  if (!context?.reviewScope?.checkpointSha) return normalization;
+  if (stringValue(normalization.output.status) !== "completed") return normalization;
+  const prior = priorFindingItems(context);
+  const current = currentFindingIds(normalization.output);
+  const resolved = new Set(stringItems(normalization.output.resolved_finding_ids));
+  for (const id of resolved) {
+    if (!prior.has(id)) throw new Error(`resolved_finding_ids contains unknown finding: ${id}.`);
+    if (current.has(id)) throw new Error(`Finding ${id} cannot be current and resolved.`);
+  }
+  const carried = [...prior.values()].filter(
+    (finding) => !current.has(finding.id) && !resolved.has(finding.id),
+  );
+  if (!carried.length) return normalization;
+  return {
+    ...normalization,
+    carriedFindings: carried.length,
+    output: {
+      ...normalization.output,
+      findings: [...stringItems(normalization.output.findings), ...carried.map(carriedFindingText)],
+      next_state: "changes-required",
+    },
+  };
+}
+
+function priorFindingItems(
+  context: ContextPacket,
+): Map<string, { body: string; id: string; url: string }> {
+  const findings = new Map<string, { body: string; id: string; url: string }>();
+  for (const item of context.timeline) {
+    if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
+    if (!gitVibeReviewAuthor(item.author)) continue;
+    const id = reviewFindingMarkerId(item.body);
+    if (id) findings.set(id, { body: visibleReviewCommentBody(item.body), id, url: item.url });
+  }
+  return findings;
+}
+
+function currentFindingIds(output: JsonObject): Set<string> {
+  if (!Array.isArray(output.inline_comments)) return new Set();
+  return new Set(
+    output.inline_comments.flatMap((value) => {
+      const item = recordValue(value);
+      const id = item ? stringValue(item.finding_id) : "";
+      return id ? [id] : [];
+    }),
+  );
+}
+
+function carriedFindingText(finding: { body: string; id: string; url: string }): string {
+  const detail = finding.body.replace(/\s+/g, " ").trim().slice(0, 300);
+  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}`;
+}
+
+function gitVibeReviewAuthor(value: string): boolean {
+  const login = value.trim().toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
+}
+
+function stringItems(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(stringValue).filter(Boolean) : [];
 }
 
 function groupedInlineComments(comments: unknown[]): Map<string, IndexedInlineComment[]> {
@@ -120,7 +199,7 @@ function compareStrings(left: string, right: string): number {
 }
 
 function unchangedOutput(output: JsonObject): ReviewMatrixOutputNormalization {
-  return { duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
+  return { carriedFindings: 0, duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
 }
 
 function recordValue(value: unknown): JsonObject | undefined {

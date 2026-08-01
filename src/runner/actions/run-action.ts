@@ -11,7 +11,7 @@ import { matrixMemberRowForStage } from "../role-groups.js";
 import { parseSourceComment } from "../../shared/source-comments.js";
 import { parseStage } from "../../shared/stages.js";
 import type { GitHubActionsRunnerPermissionProfile } from "../../shared/github-app-permissions.js";
-import type { RunnerOptions, Stage, StageRunResult } from "../../shared/types.js";
+import type { ReviewRunState, RunnerOptions, Stage, StageRunResult } from "../../shared/types.js";
 import { githubAppToken, runnerPermissionProfileForStage } from "./github-app-token.js";
 
 export interface ActionRuntime {
@@ -65,6 +65,7 @@ export async function runAction(runtime: ActionRuntime = {}): Promise<number> {
       prNumber: target.prNumber,
       profileName: profileSelection.profileName,
       repository,
+      review: reviewRunOptions(stage, env),
       roleName: profileSelection.roleName,
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
@@ -168,6 +169,17 @@ function executionModeEnv(env: NodeJS.ProcessEnv): RunnerOptions["executionMode"
     return value;
   }
   throw new Error("GITVIBE_EXECUTION_MODE must be standard, member, or finalizer.");
+}
+
+function reviewRunOptions(stage: Stage, env: NodeJS.ProcessEnv): ReviewRunState | undefined {
+  if (stage !== "review-matrix") return undefined;
+  return {
+    baseSha: envValue(env, "GITVIBE_REVIEW_BASE_SHA") || undefined,
+    checkpointSha: envValue(env, "GITVIBE_REVIEW_CHECKPOINT_SHA") || undefined,
+    inputSafetyDigest: envValue(env, "GITVIBE_INPUT_SAFETY_DIGEST") || undefined,
+    snapshotSha: envValue(env, "GITVIBE_REVIEW_SNAPSHOT_SHA") || undefined,
+    targetSha: envValue(env, "GITVIBE_REVIEW_TARGET_SHA") || undefined,
+  };
 }
 
 function executionProfileSelection(options: {

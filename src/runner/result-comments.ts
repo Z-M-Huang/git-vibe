@@ -1,4 +1,5 @@
 import type { ContextPacket, JsonObject, Stage } from "../shared/types.js";
+import { reviewCheckpointVersion } from "../shared/stage-result-markers.js";
 import { stageStartMarker, workflowRunIdFromUrl } from "../shared/status-comments.js";
 
 export interface StageResultLink {
@@ -72,7 +73,11 @@ function resultMarker(options: StageResultCommentOptions): string {
   const artifact = options.context.artifact;
   const run = workflowRunIdFromUrl(options.workflowRunUrl);
   const runAttribute = run ? ` run=${run}` : "";
-  return `<!-- git-vibe:stage-result stage=${options.stage} artifact=${artifact.type} number=${artifact.number}${runAttribute} -->`;
+  const reviewScope = options.stage === "review-matrix" ? options.context.reviewScope : undefined;
+  const reviewAttributes = reviewScope
+    ? ` review-version=${reviewCheckpointVersion} base-sha=${reviewScope.baseSha} head-sha=${reviewScope.targetSha} snapshot-sha=${reviewScope.snapshotSha}`
+    : "";
+  return `<!-- git-vibe:stage-result stage=${options.stage} artifact=${artifact.type} number=${artifact.number}${runAttribute}${reviewAttributes} -->`;
 }
 
 function stageTitle(options: Pick<StageResultCommentOptions, "context" | "stage">): string {

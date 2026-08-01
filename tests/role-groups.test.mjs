@@ -316,7 +316,8 @@ describe("role group result loading", () => {
     const synthesizerSystem = synthesizerSystemPrompt("review-matrix");
     expect(synthesizerSystem).toContain("<role_group_synthesizer>");
     expect(synthesizerSystem).toContain("Build every output field from the member results.");
-    expect(synthesizerSystem).toContain("Preserve every distinct member finding.");
+    expect(synthesizerSystem).toContain("Treat member findings as candidates, not proof.");
+    expect(synthesizerSystem).toContain("current-snapshot evidence");
     expect(synthesizerSystem).toContain(
       "Merge findings only when they describe the same underlying issue",
     );
@@ -325,6 +326,10 @@ describe("role group result loading", () => {
     expect(synthesizerSystem).not.toContain("Discard false positives");
     expect(synthesizerSystem).toContain(
       "Every inline_comments finding_id must be unique in the final output.",
+    );
+    expect(synthesizerSystem).toContain("Preserve resolved_finding_ids only when member evidence");
+    expect(synthesizerSystemPrompt("validate")).toContain(
+      "Preserve every distinct member finding.",
     );
     expect(synthesizerSystemPrompt("validate")).not.toContain("inline_comments finding_id");
 

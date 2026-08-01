@@ -20,6 +20,7 @@ Review the proposed pull request or merge-preparation change. Report only valida
 - For each required fix that can be anchored to an exact changed pull request diff line, add a matching `inline_comments` item with `path`, right-side `line`, and a concise `body` that explains the failure and required fix. Use `start_line` only for a contiguous range on the same side. For a range, `start_line` is the first line and must be less than or equal to `line`, which is the final line. Do not invent anchors; keep unanchored blockers in `findings` and `comment_body`.
 - Each `inline_comments` item must have a unique `finding_id` within the output. Use one ranged comment for one finding when possible, or assign distinct IDs when multiple anchors are necessary.
 - If an existing GitVibe inline review comment contains a hidden `git-vibe:review-finding id=...` marker and the same issue still applies, set the new `inline_comments` item `finding_id` to that id. Do not copy hidden markers into `body`, and do not reuse that ID for any other inline comment in the same output.
+- Do not omit a prior finding merely because it is outside the incremental patch. Put its id in `resolved_finding_ids` only when the target tree proves the issue is fixed; otherwise reuse it when still present or leave it for GitVibe to carry forward.
 - If no required fix exists, say so in `summary`, keep `findings` empty, and set `next_state` to `review-passed`.
 - Use `blocked` only when the review itself cannot be completed or a maintainer decision is required before code can continue.
   </finding_standard>
@@ -29,6 +30,7 @@ Review the proposed pull request or merge-preparation change. Report only valida
 - `tests`: Review-relevant checks observed or recommended.
 - `findings`: Blocking issues only, ordered by severity.
 - `inline_comments`: GitHub PR review comments for blocking findings that have exact changed-line anchors. Reuse `finding_id` from an existing GitVibe marker when reporting the same issue again. Leave empty or omit when there are no anchorable blockers.
+- `resolved_finding_ids`: Prior GitVibe finding IDs that current-target evidence proves fixed. Leave empty or omit when none were verified.
 - `questions`: Maintainer decisions required before code can continue, preferably as answerable question objects with up to four options.
 - `next_state`: Use `review-passed` when the PR can proceed to approval, `changes-required` when implementation must address evidence-backed findings before the PR is ready for approval, or `blocked` when automation must stop.
   </required_fields_guidance>

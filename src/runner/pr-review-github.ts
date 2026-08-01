@@ -12,6 +12,7 @@ export interface PullRequestReviewComment {
 export async function createPullRequestReview(options: {
   body: string;
   client: GitHubClient;
+  commitId?: string;
   comments: PullRequestReviewComment[];
   pullNumber: string;
   repository: string;
@@ -22,6 +23,7 @@ export async function createPullRequestReview(options: {
     body: {
       body: options.body,
       comments: options.comments.length ? options.comments : undefined,
+      commit_id: options.commitId,
       event: "COMMENT",
     },
     method: "POST",

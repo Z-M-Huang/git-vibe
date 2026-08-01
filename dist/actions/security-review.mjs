@@ -1000,14 +1000,14 @@ var require_foldFlowLines = __commonJS({
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
     var FOLD_QUOTED = "quoted";
-    function foldFlowLines(text, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+    function foldFlowLines(text2, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
       if (!lineWidth || lineWidth < 0)
-        return text;
+        return text2;
       if (lineWidth < minContentWidth)
         minContentWidth = 0;
       const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-      if (text.length <= endStep)
-        return text;
+      if (text2.length <= endStep)
+        return text2;
       const folds = [];
       const escapedFolds = {};
       let end = lineWidth - indent.length;
@@ -1024,14 +1024,14 @@ var require_foldFlowLines = __commonJS({
       let escStart = -1;
       let escEnd = -1;
       if (mode === FOLD_BLOCK) {
-        i = consumeMoreIndentedLines(text, i, indent.length);
+        i = consumeMoreIndentedLines(text2, i, indent.length);
         if (i !== -1)
           end = i + endStep;
       }
-      for (let ch2; ch2 = text[i += 1]; ) {
+      for (let ch2; ch2 = text2[i += 1]; ) {
         if (mode === FOLD_QUOTED && ch2 === "\\") {
           escStart = i;
-          switch (text[i + 1]) {
+          switch (text2[i + 1]) {
             case "x":
               i += 3;
               break;
@@ -1048,12 +1048,12 @@ var require_foldFlowLines = __commonJS({
         }
         if (ch2 === "\n") {
           if (mode === FOLD_BLOCK)
-            i = consumeMoreIndentedLines(text, i, indent.length);
+            i = consumeMoreIndentedLines(text2, i, indent.length);
           end = i + indent.length + endStep;
           split = void 0;
         } else {
           if (ch2 === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-            const next = text[i + 1];
+            const next = text2[i + 1];
             if (next && next !== " " && next !== "\n" && next !== "	")
               split = i;
           }
@@ -1065,12 +1065,12 @@ var require_foldFlowLines = __commonJS({
             } else if (mode === FOLD_QUOTED) {
               while (prev === " " || prev === "	") {
                 prev = ch2;
-                ch2 = text[i += 1];
+                ch2 = text2[i += 1];
                 overflow = true;
               }
               const j3 = i > escEnd + 1 ? i - 2 : escStart - 1;
               if (escapedFolds[j3])
-                return text;
+                return text2;
               folds.push(j3);
               escapedFolds[j3] = true;
               end = j3 + endStep;
@@ -1085,39 +1085,39 @@ var require_foldFlowLines = __commonJS({
       if (overflow && onOverflow)
         onOverflow();
       if (folds.length === 0)
-        return text;
+        return text2;
       if (onFold)
         onFold();
-      let res = text.slice(0, folds[0]);
+      let res = text2.slice(0, folds[0]);
       for (let i3 = 0; i3 < folds.length; ++i3) {
         const fold = folds[i3];
-        const end2 = folds[i3 + 1] || text.length;
+        const end2 = folds[i3 + 1] || text2.length;
         if (fold === 0)
           res = `
-${indent}${text.slice(0, end2)}`;
+${indent}${text2.slice(0, end2)}`;
         else {
           if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text[fold]}\\`;
+            res += `${text2[fold]}\\`;
           res += `
-${indent}${text.slice(fold + 1, end2)}`;
+${indent}${text2.slice(fold + 1, end2)}`;
         }
       }
       return res;
     }
-    function consumeMoreIndentedLines(text, i, indent) {
+    function consumeMoreIndentedLines(text2, i, indent) {
       let end = i;
       let start = i + 1;
-      let ch2 = text[start];
+      let ch2 = text2[start];
       while (ch2 === " " || ch2 === "	") {
         if (i < start + indent) {
-          ch2 = text[++i];
+          ch2 = text2[++i];
         } else {
           do {
-            ch2 = text[++i];
+            ch2 = text2[++i];
           } while (ch2 && ch2 !== "\n");
           end = i;
           start = i + 1;
-          ch2 = text[start];
+          ch2 = text2[start];
         }
       }
       return end;
@@ -11631,7 +11631,7 @@ var require_core = __commonJS({
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
         if (!errors || errors.length === 0)
           return "No errors";
-        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text, msg) => text + separator + msg);
+        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text2, msg) => text2 + separator + msg);
       }
       $dataMetaSchema(metaSchema, keywordsJsonPointers) {
         const rules = this.RULES.all;
@@ -22428,11 +22428,11 @@ function ko_default() {
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/lt.js
-var capitalizeFirstCharacter = (text) => {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+var capitalizeFirstCharacter = (text2) => {
+  return text2.charAt(0).toUpperCase() + text2.slice(1);
 };
-function getUnitTypeFromNumber(number4) {
-  const abs = Math.abs(number4);
+function getUnitTypeFromNumber(number5) {
+  const abs = Math.abs(number5);
   const last = abs % 10;
   const last2 = abs % 100;
   if (last2 >= 11 && last2 <= 19 || last === 0)
@@ -29368,8 +29368,8 @@ var GitHubClient = class {
         );
       }
       if (response.status === 204) return {};
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : {};
+      const text2 = await response.text();
+      const data = text2 ? JSON.parse(text2) : {};
       if (response.ok) return data;
       lastError = new Error(
         `GitHub API ${method} ${path3} failed: ${response.status} ${JSON.stringify(data)}`
@@ -29502,6 +29502,44 @@ function markerAttributes(body, marker) {
 }
 function isPositiveIssueNumber(value) {
   return /^[1-9]\d*$/.test(value);
+}
+
+// src/shared/stages.ts
+var stageDefinitions = {
+  investigate: {
+    promptDir: "investigate",
+    schemaFile: "investigate.v1.schema.json",
+    schemaId: "investigate.v1",
+    target: "issue",
+    tools: ["read", "grep", "glob", "diff", "github-search", "web-fetch", "web-search", "agent"]
+  },
+  validate: {
+    promptDir: "validate",
+    schemaFile: "validate.v1.schema.json",
+    schemaId: "validate.v1",
+    target: "issue",
+    tools: ["read", "grep", "glob", "github-search", "web-fetch", "web-search", "agent"]
+  },
+  materialize: {
+    promptDir: "materialize",
+    schemaFile: "materialize.v2.schema.json",
+    schemaId: "materialize.v2",
+    target: "discussion",
+    tools: ["read", "grep", "glob"]
+  },
+  "review-matrix": {
+    promptDir: "review-matrix",
+    schemaFile: "review-matrix.v1.schema.json",
+    schemaId: "review-matrix.v1",
+    target: "issue",
+    tools: ["read", "grep", "glob", "diff", "agent"]
+  }
+};
+function parseStage(value) {
+  if (value && value in stageDefinitions) {
+    return value;
+  }
+  throw new Error(`Unknown GitVibe action stage: ${value || "<missing>"}`);
 }
 
 // src/runner/context-graphql.ts
@@ -29819,7 +29857,297 @@ var pullRequestReviewThreadCommentsQuery = `
   }
 `;
 
+// src/runner/review-scope.ts
+import { createHash } from "node:crypto";
+
+// src/shared/stage-result-markers.ts
+var reviewCheckpointVersion = "1";
+function parseStageResultMarker(body) {
+  const match = String(body || "").match(/<!--\s*git-vibe:stage-result\s+([^>]*)-->/);
+  if (!match) return void 0;
+  const attributes = parseAttributes(match[1] || "");
+  const artifact = artifactField(attributes.artifact);
+  const number5 = stringField(attributes.number);
+  if (!artifact || !number5 || !attributes.stage) return void 0;
+  try {
+    const baseSha = stringField(attributes["base-sha"]);
+    const headSha = stringField(attributes["head-sha"]);
+    const reviewVersion = stringField(attributes["review-version"]);
+    const run = stringField(attributes.run);
+    const snapshotSha = stringField(attributes["snapshot-sha"]);
+    return {
+      artifact,
+      ...baseSha ? { baseSha } : {},
+      ...headSha ? { headSha } : {},
+      ...reviewVersion ? { reviewVersion } : {},
+      number: number5,
+      ...run ? { run } : {},
+      ...snapshotSha ? { snapshotSha } : {},
+      stage: parseStage(attributes.stage)
+    };
+  } catch {
+    return void 0;
+  }
+}
+function stageResultStatus(body) {
+  const line = String(body || "").split(/\r?\n/).find((value) => value.includes("**Status:**"));
+  return normalizedState(line?.match(/`([^`]+)`/)?.[1]);
+}
+function parseAttributes(value) {
+  const attributes = {};
+  for (const match of value.matchAll(/([a-z][a-z-]*)=([^\s>]+)/g)) {
+    attributes[match[1] || ""] = match[2];
+  }
+  return attributes;
+}
+function artifactField(value) {
+  if (value === "discussion" || value === "issue" || value === "pull-request") return value;
+  return void 0;
+}
+function normalizedState(value) {
+  return String(value || "").trim().toLowerCase().replaceAll("_", "-").replace(/\s+/g, "-");
+}
+function stringField(value) {
+  const text2 = String(value || "").trim();
+  return text2 || void 0;
+}
+
+// src/runner/review-scope.ts
+async function pullRequestReviewFiles(options) {
+  const review = options.review;
+  if (!review) {
+    return { files: await fullPullRequestFiles(options) };
+  }
+  const current = currentPullRequestState(options.pullRequest);
+  validateExpectedReviewState(current, review);
+  const targetSha = review.targetSha || current.targetSha;
+  const selected = await selectedReviewRange({ ...options, current, review, targetSha });
+  const scope = reviewScope({
+    baseSha: current.baseSha,
+    checkpoint: selected.checkpoint,
+    files: selected.files,
+    headRepository: current.headRepository,
+    targetSha
+  });
+  validateExpectedSnapshot(scope, review);
+  return { files: selected.files, scope };
+}
+async function selectedReviewRange(options) {
+  const candidates = checkpointCandidates(options.reviews, options.current.baseSha);
+  if (options.review.snapshotSha) {
+    if (!options.review.checkpointSha) {
+      return { files: await fullPullRequestFiles(options) };
+    }
+    const checkpointSha = requiredSha(options.review.checkpointSha, "review checkpoint SHA");
+    const checkpoint = candidates.find((candidate) => candidate.headSha === checkpointSha);
+    if (!checkpoint) {
+      throw new Error(`Completed review checkpoint ${checkpointSha} is no longer available.`);
+    }
+    const compared = await comparisonRange({ ...options, checkpoint, strict: true });
+    if (!compared) throw new Error(`Unable to reconstruct review checkpoint ${checkpointSha}.`);
+    return compared;
+  }
+  if (options.review.checkpointSha) {
+    throw new Error("A frozen review checkpoint requires a snapshot SHA.");
+  }
+  for (const checkpoint of candidates) {
+    const compared = await comparisonRange({ ...options, checkpoint, strict: false });
+    if (compared) return compared;
+  }
+  return { files: await fullPullRequestFiles(options) };
+}
+async function comparisonRange(options) {
+  if (options.checkpoint.headSha === options.targetSha) {
+    return { checkpoint: options.checkpoint, files: [] };
+  }
+  const comparison = await options.client.request({
+    method: "GET",
+    path: `/repos/${options.owner}/${options.name}/compare/${options.checkpoint.headSha}...${options.targetSha}`,
+    token: options.token
+  });
+  if (comparison.status !== "ahead") {
+    if (!options.strict) return void 0;
+    throw new Error(
+      `Review checkpoint ${options.checkpoint.headSha} is not an ancestor of target ${options.targetSha}.`
+    );
+  }
+  if (!Array.isArray(comparison.files)) {
+    throw new Error("GitHub compare response was missing changed files.");
+  }
+  if (comparison.files.length >= 300) {
+    if (!options.strict) return void 0;
+    throw new Error("GitHub compare response reached the 300-file limit.");
+  }
+  return { checkpoint: options.checkpoint, files: pullRequestFiles(comparison.files) };
+}
+async function fullPullRequestFiles(options) {
+  const files = await paginatedGitHubRequest(options.client, {
+    method: "GET",
+    path: `/repos/${options.owner}/${options.name}/pulls/${options.pullNumber}/files`,
+    token: options.token
+  });
+  return pullRequestFiles(files);
+}
+function checkpointCandidates(reviews, baseSha) {
+  return reviews.flatMap((review) => {
+    if (!gitVibeReviewAuthor(review.user?.login) || stageResultStatus(review.body) !== "completed") {
+      return [];
+    }
+    const marker = parseStageResultMarker(review.body);
+    if (marker?.stage !== "review-matrix" || marker.artifact !== "pull-request" || marker.reviewVersion !== reviewCheckpointVersion || marker.baseSha !== baseSha || !validSha(marker.headSha) || !validDigest(marker.snapshotSha)) {
+      return [];
+    }
+    return [
+      {
+        headSha: marker.headSha,
+        submittedAt: review.submitted_at || ""
+      }
+    ];
+  }).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
+}
+function currentPullRequestState(pullRequest) {
+  return {
+    baseSha: requiredSha(pullRequest.base?.sha, "pull request base SHA"),
+    headRepository: requiredText(pullRequest.head?.repo?.full_name, "pull request head repository"),
+    targetSha: requiredSha(pullRequest.head?.sha, "pull request head SHA")
+  };
+}
+function validateExpectedReviewState(current, review) {
+  if (review.targetSha && review.targetSha !== current.targetSha) {
+    throw new Error(
+      `Review target ${review.targetSha} was superseded by pull request head ${current.targetSha}.`
+    );
+  }
+  if (review.baseSha && review.baseSha !== current.baseSha) {
+    throw new Error(
+      `Review base ${review.baseSha} was superseded by pull request base ${current.baseSha}.`
+    );
+  }
+}
+function validateExpectedSnapshot(scope, review) {
+  if (review.snapshotSha && review.snapshotSha !== scope.snapshotSha) {
+    throw new Error(
+      `Review snapshot ${review.snapshotSha} did not match reconstructed snapshot ${scope.snapshotSha}.`
+    );
+  }
+}
+function reviewScope(options) {
+  const snapshotSha = createHash("sha256").update(
+    JSON.stringify({
+      baseSha: options.baseSha,
+      checkpointSha: options.checkpoint?.headSha || "",
+      files: [...options.files].sort(compareFiles).map(fileSnapshot),
+      headRepository: options.headRepository,
+      targetSha: options.targetSha
+    })
+  ).digest("hex");
+  return {
+    baseSha: options.baseSha,
+    ...options.checkpoint ? {
+      checkpointSha: options.checkpoint.headSha,
+      ...options.checkpoint.submittedAt ? { checkpointSubmittedAt: options.checkpoint.submittedAt } : {}
+    } : {},
+    headRepository: options.headRepository,
+    snapshotSha,
+    targetSha: options.targetSha
+  };
+}
+function fileSnapshot(file2) {
+  return {
+    additions: file2.additions,
+    changes: file2.changes,
+    deletions: file2.deletions,
+    filename: file2.filename,
+    patch: file2.patch,
+    previousFilename: file2.previousFilename,
+    status: file2.status
+  };
+}
+function compareFiles(left, right) {
+  return left.filename.localeCompare(right.filename);
+}
+function pullRequestFiles(files) {
+  return files.map(toPullRequestFile).filter((file2) => Boolean(file2));
+}
+function toPullRequestFile(file2) {
+  const filename = text(file2.filename);
+  if (!filename) return void 0;
+  return {
+    additions: number4(file2.additions),
+    blobUrl: text(file2.blob_url),
+    changes: number4(file2.changes),
+    contentsUrl: text(file2.contents_url),
+    deletions: number4(file2.deletions),
+    filename,
+    patch: text(file2.patch),
+    previousFilename: text(file2.previous_filename),
+    rawUrl: text(file2.raw_url),
+    status: text(file2.status) || "modified"
+  };
+}
+function gitVibeReviewAuthor(value) {
+  const login = text(value).toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
+}
+function requiredSha(value, label) {
+  if (!validSha(value)) throw new Error(`GitHub did not provide a valid ${label}.`);
+  return value;
+}
+function validSha(value) {
+  return Boolean(value && /^[a-f0-9]{40,64}$/i.test(value));
+}
+function validDigest(value) {
+  return Boolean(value && /^[a-f0-9]{64}$/i.test(value));
+}
+function requiredText(value, label) {
+  const result = text(value);
+  if (!result) throw new Error(`GitHub did not provide a valid ${label}.`);
+  return result;
+}
+function text(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+function number4(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+
 // src/runner/context.ts
+async function contextForStage(client, options) {
+  const definition = stageDefinitions[options.stage];
+  if (options.stage === "validate" && process.env.GITVIBE_DISCUSSION_NUMBER && !options.issueNumber) {
+    return buildDiscussionContext({
+      client,
+      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER,
+      repository: options.repository,
+      token: options.token
+    });
+  }
+  if (definition.target === "discussion") {
+    return buildDiscussionContext({
+      client,
+      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER || options.issueNumber,
+      repository: options.repository,
+      token: options.token
+    });
+  }
+  if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
+    return buildIssueContext({
+      client,
+      issueNumber: options.prNumber,
+      review: options.stage === "review-matrix" ? options.review : void 0,
+      repository: options.repository,
+      token: options.token,
+      type: "pull-request"
+    });
+  }
+  return buildIssueContext({
+    client,
+    issueNumber: definition.target === "pull-request" ? options.prNumber : options.issueNumber,
+    repository: options.repository,
+    token: options.token,
+    type: definition.target
+  });
+}
 async function buildIssueContext(options) {
   const { owner, repo } = splitRepository(options.repository);
   const issue2 = await options.client.request({
@@ -29862,20 +30190,24 @@ async function buildIssueContext(options) {
     repository: options.repository,
     token: options.token
   }) : [];
-  const pullRequestFiles = options.type === "pull-request" ? await pullRequestFilesFor({
+  const pullRequestReview = options.type === "pull-request" && pullRequest ? await pullRequestReviewFiles({
     client: options.client,
-    issueNumber: options.issueNumber,
     name: repo,
     owner,
+    pullNumber: options.issueNumber,
+    pullRequest,
+    review: options.review,
+    reviews,
     token: options.token
-  }) : [];
-  const timeline = [
-    toTimelineItem("body", `issue-${options.issueNumber}`, issue2),
-    ...comments.map((comment) => toTimelineItem("comment", String(comment.id || ""), comment)),
-    ...reviews.map(toPullRequestReviewBodyTimelineItem),
-    ...reviewComments.map(toPullRequestReviewTimelineItem),
-    ...relatedTimeline
-  ].sort(compareTimelineItems);
+  }) : { files: [] };
+  const timeline = pullRequestTimeline({
+    comments,
+    issue: issue2,
+    issueNumber: options.issueNumber,
+    relatedTimeline,
+    reviewComments,
+    reviews: reviewBodiesForContext(reviews, pullRequestReview.scope)
+  });
   return {
     artifact: {
       body: issue2.body || "",
@@ -29889,10 +30221,34 @@ async function buildIssueContext(options) {
       pullRequestHead: pullRequestHead(pullRequest)
     },
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    pullRequestFiles: pullRequestFiles.length ? pullRequestFiles : void 0,
+    pullRequestFiles: pullRequestReview.files.length ? pullRequestReview.files : void 0,
     repository: options.repository,
+    reviewScope: pullRequestReview.scope,
     timeline
   };
+}
+function pullRequestTimeline(options) {
+  return [
+    toTimelineItem("body", `issue-${options.issueNumber}`, options.issue),
+    ...options.comments.map(
+      (comment) => toTimelineItem("comment", String(comment.id || ""), comment)
+    ),
+    ...options.reviews.map(toPullRequestReviewBodyTimelineItem),
+    ...options.reviewComments.map(toPullRequestReviewTimelineItem),
+    ...options.relatedTimeline
+  ].sort(compareTimelineItems);
+}
+function reviewBodiesForContext(reviews, scope) {
+  const cutoff = scope?.checkpointSubmittedAt;
+  if (!cutoff) return reviews;
+  return reviews.filter((review) => {
+    if (!gitVibeReviewAuthor2(review.user?.login)) return true;
+    return !review.submitted_at || review.submitted_at >= cutoff;
+  });
+}
+function gitVibeReviewAuthor2(value) {
+  const login = String(value || "").trim().toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
 function labelNames(labels) {
   return (labels || []).map((label) => typeof label === "string" ? label : label.name || "").filter(Boolean);
@@ -29904,35 +30260,11 @@ async function pullRequestDetails(options) {
     token: options.token
   });
 }
-async function pullRequestFilesFor(options) {
-  const files = await paginatedGitHubRequest(options.client, {
-    method: "GET",
-    path: `/repos/${options.owner}/${options.name}/pulls/${options.issueNumber}/files`,
-    token: options.token
-  });
-  return files.map(toPullRequestFile).filter((file2) => Boolean(file2));
-}
 function pullRequestHead(pullRequest) {
   const branch = pullRequest?.head?.ref || "";
   const repository = pullRequest?.head?.repo?.full_name || (pullRequest?.head?.repo?.owner?.login && pullRequest.head.repo.name ? `${pullRequest.head.repo.owner.login}/${pullRequest.head.repo.name}` : "");
   if (!branch || !repository) return void 0;
   return { branch, repository, sha: pullRequest?.head?.sha };
-}
-function toPullRequestFile(file2) {
-  const filename = stringField(file2.filename);
-  if (!filename) return void 0;
-  return {
-    additions: numberField(file2.additions),
-    blobUrl: stringField(file2.blob_url),
-    changes: numberField(file2.changes),
-    contentsUrl: stringField(file2.contents_url),
-    deletions: numberField(file2.deletions),
-    filename,
-    patch: stringField(file2.patch),
-    previousFilename: stringField(file2.previous_filename),
-    rawUrl: stringField(file2.raw_url),
-    status: stringField(file2.status) || "modified"
-  };
 }
 async function pullRequestRelatedTimeline(options) {
   const issueNumbers = gitVibeTraceabilityIssueNumbers(options.issue.body || "");
@@ -30142,12 +30474,6 @@ function discussionNodeToTimelineItem(kind, id2, item, parentId) {
 function compareTimelineItems(left, right) {
   return left.createdAt.localeCompare(right.createdAt);
 }
-function stringField(value) {
-  return typeof value === "string" ? value : void 0;
-}
-function numberField(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
-}
 var relatedIssuesQuery = `
   query GitVibeRelatedIssues($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
@@ -30170,66 +30496,26 @@ import { appendFileSync, readdirSync, readFileSync as readFileSync2, writeFileSy
 import { join } from "node:path";
 
 // src/shared/accepted-risk.ts
-import { createHash } from "node:crypto";
-
-// src/shared/stages.ts
-var stageDefinitions = {
-  investigate: {
-    promptDir: "investigate",
-    schemaFile: "investigate.v1.schema.json",
-    schemaId: "investigate.v1",
-    target: "issue",
-    tools: ["read", "grep", "glob", "diff", "github-search", "web-fetch", "web-search", "agent"]
-  },
-  validate: {
-    promptDir: "validate",
-    schemaFile: "validate.v1.schema.json",
-    schemaId: "validate.v1",
-    target: "issue",
-    tools: ["read", "grep", "glob", "github-search", "web-fetch", "web-search", "agent"]
-  },
-  materialize: {
-    promptDir: "materialize",
-    schemaFile: "materialize.v2.schema.json",
-    schemaId: "materialize.v2",
-    target: "discussion",
-    tools: ["read", "grep", "glob"]
-  },
-  "review-matrix": {
-    promptDir: "review-matrix",
-    schemaFile: "review-matrix.v1.schema.json",
-    schemaId: "review-matrix.v1",
-    target: "issue",
-    tools: ["read", "grep", "glob", "diff", "agent"]
-  }
-};
-function parseStage(value) {
-  if (value && value in stageDefinitions) {
-    return value;
-  }
-  throw new Error(`Unknown GitVibe action stage: ${value || "<missing>"}`);
-}
-
-// src/shared/accepted-risk.ts
+import { createHash as createHash2 } from "node:crypto";
 var metadataStartPattern = /<!--\s*git-vibe:accepted-risk-metadata\s+([^>]*)-->/;
 var metadataBlockPattern = /\n*<!--\s*git-vibe:accepted-risk-metadata\s+[^>]*-->[\s\S]*?<!--\s*git-vibe:accepted-risk-end\s*-->\n*/g;
 function acceptedRiskArtifactContentSha(content) {
-  return createHash("sha256").update(JSON.stringify(normalizedArtifactContent(content))).digest("hex");
+  return createHash2("sha256").update(JSON.stringify(normalizedArtifactContent(content))).digest("hex");
 }
 function acceptedRiskMetadataBodySha(body) {
-  return createHash("sha256").update(
+  return createHash2("sha256").update(
     String(body || "").replace(metadataBlockPattern, "").trimEnd()
   ).digest("hex");
 }
 function parseAcceptedRiskMetadata(body) {
   const match = String(body || "").match(metadataStartPattern);
   if (!match) return void 0;
-  const attributes = parseAttributes(match[1] || "");
-  const artifact = artifactField(attributes.artifact);
-  const number4 = stringField2(attributes.number);
+  const attributes = parseAttributes2(match[1] || "");
+  const artifact = artifactField2(attributes.artifact);
+  const number5 = stringField2(attributes.number);
   const cutoff = stringField2(attributes.cutoff);
   const artifactContentSha = stringField2(attributes["artifact-content-sha"]);
-  if (!artifact || !number4 || !cutoff || !artifactContentSha || !attributes.stage) {
+  if (!artifact || !number5 || !cutoff || !artifactContentSha || !attributes.stage) {
     return void 0;
   }
   try {
@@ -30240,7 +30526,7 @@ function parseAcceptedRiskMetadata(body) {
       artifactContentSha,
       artifactSha: stringField2(attributes["artifact-sha"]),
       cutoff,
-      number: number4,
+      number: number5,
       run: stringField2(attributes.run),
       runAttempt: stringField2(attributes["run-attempt"]),
       stage,
@@ -30256,14 +30542,14 @@ function normalizedArtifactContent(content) {
     title: typeof content.title === "string" ? content.title : ""
   };
 }
-function parseAttributes(value) {
+function parseAttributes2(value) {
   const attributes = {};
   for (const match of value.matchAll(/([a-z][a-z-]*)=([^\s>]+)/g)) {
     attributes[match[1] || ""] = decodeURIComponent(match[2] || "");
   }
   return attributes;
 }
-function artifactField(value) {
+function artifactField2(value) {
   if (value === "discussion" || value === "issue" || value === "pull-request") return value;
   return void 0;
 }
@@ -30272,8 +30558,8 @@ function stagesField(value, fallback) {
   return stages.length ? stages : [fallback];
 }
 function stringField2(value) {
-  const text = String(value || "").trim();
-  return text || void 0;
+  const text2 = String(value || "").trim();
+  return text2 || void 0;
 }
 
 // src/runner/handoffs.ts
@@ -30429,9 +30715,9 @@ function uniqueHandoffs(handoffs) {
 }
 function stageResultAttributes(body) {
   const match = body.match(/<!--\s*git-vibe:stage-result\s+([^>]*)-->/);
-  return match ? parseAttributes2(match[1] || "") : {};
+  return match ? parseAttributes3(match[1] || "") : {};
 }
-function parseAttributes2(value) {
+function parseAttributes3(value) {
   const attributes = {};
   for (const match of value.matchAll(/([a-z][a-z-]*)=([^\s>]+)/g)) {
     attributes[match[1] || ""] = match[2];
@@ -32578,7 +32864,7 @@ function validateEnvName(value, path3) {
 }
 
 // src/runner/content-units.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 
 // src/runner/ignored-authors.ts
 var defaultSafetyIgnoredAuthors = ["coderabbitai", "coderabbitai[bot]"];
@@ -32724,8 +33010,8 @@ function pullRequestFileText(file2) {
 ${file2.patch}` : ""
   ].filter(Boolean).join("\n");
 }
-function unit(id2, kind, label, text, options = {}) {
-  return { id: id2, kind, label, text, ...options };
+function unit(id2, kind, label, text2, options = {}) {
+  return { id: id2, kind, label, text: text2, ...options };
 }
 function artifactContentAccepted(context, acceptedSha) {
   return Boolean(acceptedSha && acceptedRiskArtifactContentSha(context.artifact) === acceptedSha);
@@ -32779,8 +33065,8 @@ function sourceIdMatches(metadata, acceptedSource) {
   );
 }
 function sourceField(value) {
-  const text = String(value ?? "").trim();
-  return text || void 0;
+  const text2 = String(value ?? "").trim();
+  return text2 || void 0;
 }
 function timelineUnits(item, index) {
   const id2 = `timeline-${index}-${slug(item.kind)}-${slug(item.id || item.url || "item")}`;
@@ -32855,19 +33141,19 @@ function pullRequestFileUnit(file2, index) {
     }
   );
 }
-function chunkText(text, options) {
-  if (text.length <= options.chunkSize) return [{ end: text.length, start: 0, text }];
+function chunkText(text2, options) {
+  if (text2.length <= options.chunkSize) return [{ end: text2.length, start: 0, text: text2 }];
   const chunks = [];
   const step = Math.max(1, options.chunkSize - options.overlap);
-  for (let start = 0; start < text.length; start += step) {
-    const end = Math.min(text.length, start + options.chunkSize);
-    chunks.push({ end, start, text: text.slice(start, end) });
-    if (end >= text.length) break;
+  for (let start = 0; start < text2.length; start += step) {
+    const end = Math.min(text2.length, start + options.chunkSize);
+    chunks.push({ end, start, text: text2.slice(start, end) });
+    if (end >= text2.length) break;
   }
   return chunks;
 }
 function sha256(value) {
-  return createHash2("sha256").update(value).digest("hex");
+  return createHash3("sha256").update(value).digest("hex");
 }
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "item";
@@ -32944,8 +33230,8 @@ function outputValidatorContentFromSteps(steps) {
   }
   return void 0;
 }
-function extractJson(text) {
-  const trimmed = text.trim();
+function extractJson(text2) {
+  const trimmed = text2.trim();
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
   const match = trimmed.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
   if (match) return match[1].trim();
@@ -52556,7 +52842,7 @@ function namespacedToolName(server, tool) {
 
 // src/runner/mcp-sdk-config.ts
 function prepareSdkMcpConfig(options) {
-  if (options.options.toolOverride?.length === 0) return emptySdkMcpConfig();
+  if (options.options.toolOverride) return emptySdkMcpConfig();
   const stageServers = modelMcpServersForStage({
     config: options.options.config,
     stage: options.options.stage
@@ -52954,10 +53240,10 @@ function summarizeToolInput(input) {
   const keys = Object.keys(input);
   return keys.length > 0 ? `keys=${keys.slice(0, 5).join(",")}` : "";
 }
-function logSdkPromptPreview(logger, stage, label, text) {
+function logSdkPromptPreview(logger, stage, label, text2) {
   logger?.event("ai.prompt", {
-    chars: text.length,
-    preview: summarizeError(text),
+    chars: text2.length,
+    preview: summarizeError(text2),
     prompt: label,
     stage
   });
@@ -53591,7 +53877,7 @@ async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      ...options.isolateWorkspace ? { networkAccessEnabled: false, webSearchMode: "disabled" } : {},
+      ...options.isolateWorkspace || options.sandboxMode === "read-only" ? { networkAccessEnabled: false, webSearchMode: "disabled" } : {},
       sandboxMode: options.isolateWorkspace ? "read-only" : options.sandboxMode || "danger-full-access",
       skipGitRepoCheck: true,
       workingDirectory: options.isolateWorkspace ? contextDir : options.cwd
@@ -53858,7 +54144,7 @@ async function runAiStageWithProfile(options, profileName) {
   const profile = activeProfileByName(options.config, profileName);
   const adapter = adapterName(profile, `ai.profiles.${profileName}`);
   const system = systemWithProfileContext({
-    cwd: options.cwd,
+    cwd: options.profileContextCwd || options.cwd,
     profile,
     profileName,
     system: options.system
@@ -53899,17 +54185,17 @@ function parseTransientStatusMarker(body) {
     /<!--\s*git-vibe:(workflow-queued|stage-start)\s+([^>]*)-->/
   );
   if (!match) return void 0;
-  const attributes = parseAttributes3(match[2] || "");
+  const attributes = parseAttributes4(match[2] || "");
   const artifact = attributes.artifact;
-  const number4 = attributes.number;
-  if (!isArtifact(artifact) || !number4) return void 0;
+  const number5 = attributes.number;
+  if (!isArtifact(artifact) || !number5) return void 0;
   const kind = match[1];
   if (kind === "workflow-queued" && !attributes.workflow) return void 0;
   if (kind === "stage-start" && !attributes.stage) return void 0;
   return {
     artifact,
     kind,
-    number: number4,
+    number: number5,
     run: attributes.run,
     stage: attributes.stage,
     workflow: attributes.workflow
@@ -53927,7 +54213,7 @@ function matchesTransientStatusScope(marker, scope) {
 function workflowRunIdFromUrl(url2) {
   return String(url2 || "").match(/\/actions\/runs\/(\d+)/)?.[1];
 }
-function parseAttributes3(value) {
+function parseAttributes4(value) {
   const attributes = {};
   for (const match of value.matchAll(/([a-z][a-z-]*)=([^\s>]+)/g)) {
     attributes[match[1] || ""] = match[2];
@@ -53966,7 +54252,9 @@ function resultMarker(options) {
   const artifact = options.context.artifact;
   const run = workflowRunIdFromUrl(options.workflowRunUrl);
   const runAttribute = run ? ` run=${run}` : "";
-  return `<!-- git-vibe:stage-result stage=${options.stage} artifact=${artifact.type} number=${artifact.number}${runAttribute} -->`;
+  const reviewScope2 = options.stage === "review-matrix" ? options.context.reviewScope : void 0;
+  const reviewAttributes = reviewScope2 ? ` review-version=${reviewCheckpointVersion} base-sha=${reviewScope2.baseSha} head-sha=${reviewScope2.targetSha} snapshot-sha=${reviewScope2.snapshotSha}` : "";
+  return `<!-- git-vibe:stage-result stage=${options.stage} artifact=${artifact.type} number=${artifact.number}${runAttribute}${reviewAttributes} -->`;
 }
 function stageTitle(options) {
   if (options.stage === "investigate" && options.context.artifact.type === "pull-request") {
@@ -54203,16 +54491,16 @@ function isRecord6(value) {
 }
 
 // src/runner/review-matrix-output.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 
 // src/runner/review-finding-ids.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 function effectiveReviewFindingId(options) {
   return normalizedFindingId(options.explicitFindingId) || reviewFindingMarkerId(options.rawBody) || generatedFindingId(options);
 }
 function generatedFindingId(options) {
   const fingerprint = [options.path, options.startLine || "", options.line, options.body].map((part) => String(part).trim()).join("\0");
-  return `gv-${createHash3("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
+  return `gv-${createHash4("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
 }
 function normalizedFindingId(value) {
   const id2 = typeof value === "string" ? value.trim() : "";
@@ -54228,7 +54516,10 @@ function visibleReviewCommentBody(body) {
 }
 
 // src/runner/review-matrix-output.ts
-function normalizeReviewMatrixOutput(output) {
+function normalizeReviewMatrixOutput(output, context) {
+  return carryIncrementalFindings(normalizeDuplicateFindingIds(output), context);
+}
+function normalizeDuplicateFindingIds(output) {
   if (!Array.isArray(output.inline_comments)) return unchangedOutput(output);
   const comments = output.inline_comments;
   const groups = groupedInlineComments(comments);
@@ -54255,10 +54546,66 @@ function normalizeReviewMatrixOutput(output) {
     }
   }
   return {
+    carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
     rewrittenInlineComments
   };
+}
+function carryIncrementalFindings(normalization, context) {
+  if (!context?.reviewScope?.checkpointSha) return normalization;
+  if (stringValue4(normalization.output.status) !== "completed") return normalization;
+  const prior = priorFindingItems(context);
+  const current = currentFindingIds(normalization.output);
+  const resolved = new Set(stringItems2(normalization.output.resolved_finding_ids));
+  for (const id2 of resolved) {
+    if (!prior.has(id2)) throw new Error(`resolved_finding_ids contains unknown finding: ${id2}.`);
+    if (current.has(id2)) throw new Error(`Finding ${id2} cannot be current and resolved.`);
+  }
+  const carried = [...prior.values()].filter(
+    (finding) => !current.has(finding.id) && !resolved.has(finding.id)
+  );
+  if (!carried.length) return normalization;
+  return {
+    ...normalization,
+    carriedFindings: carried.length,
+    output: {
+      ...normalization.output,
+      findings: [...stringItems2(normalization.output.findings), ...carried.map(carriedFindingText)],
+      next_state: "changes-required"
+    }
+  };
+}
+function priorFindingItems(context) {
+  const findings = /* @__PURE__ */ new Map();
+  for (const item of context.timeline) {
+    if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
+    if (!gitVibeReviewAuthor3(item.author)) continue;
+    const id2 = reviewFindingMarkerId(item.body);
+    if (id2) findings.set(id2, { body: visibleReviewCommentBody(item.body), id: id2, url: item.url });
+  }
+  return findings;
+}
+function currentFindingIds(output) {
+  if (!Array.isArray(output.inline_comments)) return /* @__PURE__ */ new Set();
+  return new Set(
+    output.inline_comments.flatMap((value) => {
+      const item = recordValue(value);
+      const id2 = item ? stringValue4(item.finding_id) : "";
+      return id2 ? [id2] : [];
+    })
+  );
+}
+function carriedFindingText(finding) {
+  const detail = finding.body.replace(/\s+/g, " ").trim().slice(0, 300);
+  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}`;
+}
+function gitVibeReviewAuthor3(value) {
+  const login = value.trim().toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
+}
+function stringItems2(value) {
+  return Array.isArray(value) ? value.map(stringValue4).filter(Boolean) : [];
 }
 function groupedInlineComments(comments) {
   const groups = /* @__PURE__ */ new Map();
@@ -54295,7 +54642,7 @@ function indexedInlineComment(item, index) {
 }
 function collisionFindingId(options) {
   for (let attempt = 0; attempt <= options.occupiedIds.size; attempt += 1) {
-    const digest = createHash4("sha256").update(
+    const digest = createHash5("sha256").update(
       [options.findingId, options.stableKey, options.occurrence, attempt].map(String).join("\0")
     ).digest("hex").slice(0, 16);
     const suffix = `:${digest}`;
@@ -54311,7 +54658,7 @@ function compareStrings(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function unchangedOutput(output) {
-  return { duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
+  return { carriedFindings: 0, duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
 }
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
@@ -54340,7 +54687,8 @@ async function stageRunResult({
   logger.event("output.validation.done", {
     status: String(validatedOutput.status)
   });
-  const normalization = options.stage === "review-matrix" ? normalizeReviewMatrixOutput(validatedOutput) : {
+  const normalization = options.stage === "review-matrix" ? normalizeReviewMatrixOutput(validatedOutput, context) : {
+    carriedFindings: 0,
     duplicateFindingIds: 0,
     output: validatedOutput,
     rewrittenInlineComments: 0
@@ -54350,6 +54698,11 @@ async function stageRunResult({
     logger.event("output.inline_comments.normalized", {
       duplicate_finding_ids: normalization.duplicateFindingIds,
       rewritten_inline_comments: normalization.rewrittenInlineComments
+    });
+  }
+  if (normalization.carriedFindings > 0) {
+    logger.event("output.review_findings.carried", {
+      findings: normalization.carriedFindings
     });
   }
   const result = {
@@ -54388,6 +54741,7 @@ async function stageRunResult({
 }
 
 // src/runner/safety-gate.ts
+import { createHash as createHash6 } from "node:crypto";
 function promptInjectionGateEnabled(config2) {
   return config2.safety?.prompt_injection_gate !== false;
 }
@@ -54413,6 +54767,17 @@ function safetyGateSources(options) {
     )
   ].filter((source) => source.text.trim());
 }
+function safetyContextDigest(options) {
+  const sources = safetyContextUnits({
+    context: options.context,
+    ignoredAuthors: options.ignoredAuthors
+  });
+  return createHash6("sha256").update(
+    JSON.stringify(
+      sources.map((source) => ({ id: source.id, label: source.label, text: source.text }))
+    )
+  ).digest("hex");
+}
 function sanitizedSafetyContextUnits(units) {
   return units.map(
     (item) => gitVibeOwnedPriorSafetyResultUnit(item) ? { ...item, text: gitVibePriorSafetyResultPlaceholder(item) } : item
@@ -54429,12 +54794,12 @@ function gitVibeOwnedPriorSafetyResultUnit(unit2) {
   if (unit2.kind === "handoff") return gitVibeAutomationAuthor(unit2.metadata?.sourceAuthor);
   return false;
 }
-function priorGitVibeSafetyResultText(text) {
-  if (gitVibeAcceptedRiskText(text)) return true;
-  return text.includes("GitVibe paused this run for maintainer review.") && (text.includes("prompt-injection") || text.includes("git-vibe:accept-risk") || /"next_state"\s*:\s*"blocked"/.test(text) || /"status"\s*:\s*"blocked"/.test(text));
+function priorGitVibeSafetyResultText(text2) {
+  if (gitVibeAcceptedRiskText(text2)) return true;
+  return text2.includes("GitVibe paused this run for maintainer review.") && (text2.includes("prompt-injection") || text2.includes("git-vibe:accept-risk") || /"next_state"\s*:\s*"blocked"/.test(text2) || /"status"\s*:\s*"blocked"/.test(text2));
 }
-function gitVibeAcceptedRiskText(text) {
-  return gitVibeAcceptedRiskMetadataPattern.test(text) || /^## GitVibe Risk Accepted\s*$/m.test(text);
+function gitVibeAcceptedRiskText(text2) {
+  return gitVibeAcceptedRiskMetadataPattern.test(text2) || /^## GitVibe Risk Accepted\s*$/m.test(text2);
 }
 function gitVibeAutomationAuthor(value) {
   return gitVibeAutomationAuthors.has(stringMetadata(value).toLowerCase());
@@ -55137,6 +55502,7 @@ async function createPullRequestReview(options) {
     body: {
       body: options.body,
       comments: options.comments.length ? options.comments : void 0,
+      commit_id: options.commitId,
       event: "COMMENT"
     },
     method: "POST",
@@ -55154,6 +55520,34 @@ async function updatePullRequestReview(options) {
   });
 }
 
+// src/runner/review-target.ts
+async function assertCurrentReviewTarget(options) {
+  const targetSha = guardedTargetSha(options.context, options.runner);
+  if (!targetSha) return;
+  const currentSha = await pullRequestHeadSha(options);
+  if (currentSha !== targetSha) {
+    throw new Error(
+      `Review target ${targetSha} was superseded by pull request head ${currentSha}.`
+    );
+  }
+}
+function guardedTargetSha(context, runner) {
+  if (runner.stage !== "review-matrix" || context.artifact.type !== "pull-request")
+    return void 0;
+  return context.reviewScope?.targetSha;
+}
+async function pullRequestHeadSha(options) {
+  const { owner, repo } = splitRepository(options.runner.repository);
+  const pullRequest = await options.client.request({
+    method: "GET",
+    path: `/repos/${owner}/${repo}/pulls/${options.context.artifact.number}`,
+    token: options.runner.token
+  });
+  const sha = pullRequest.head?.sha?.trim();
+  if (!sha) throw new Error("GitHub pull request response was missing the current head SHA.");
+  return sha;
+}
+
 // src/runner/pr-review-publishing.ts
 var gitVibeAppReviewAuthors = ["gitvibe-for-github", "gitvibe-for-github[bot]"];
 function assertPullRequestReviewResultPublishable(options) {
@@ -55163,7 +55557,8 @@ function assertPullRequestReviewResultPublishable(options) {
 async function publishPullRequestReviewResult(options) {
   if (!shouldPublishPullRequestReview(options)) return false;
   const findings = reviewFindingComments(options.parsedOutput.inline_comments);
-  const newFindings = shouldReconcileReviewFindings(options.parsedOutput) ? (await reconcileReviewFindings({ ...options, findings })).newFindings : findings;
+  const reconciliation = shouldReconcileReviewFindings(options.parsedOutput) ? await planReviewFindingReconciliation({ ...options, findings }) : void 0;
+  const newFindings = reconciliation?.newFindings || findings;
   const validated = await validateReviewFindingAnchors({
     client: options.client,
     findings: newFindings,
@@ -55181,6 +55576,7 @@ async function publishPullRequestReviewResult(options) {
     workflowRunUrl: options.runner.workflowRunUrl
   });
   const existingReview = await editableReviewForStageResult({ ...options, comments });
+  await assertCurrentReviewTarget(options);
   if (existingReview) {
     options.logger.event("github.pr.review.update.start", {
       pull_request: options.context.artifact.number,
@@ -55200,24 +55596,26 @@ async function publishPullRequestReviewResult(options) {
       review: existingReview.reviewId,
       run: workflowRunIdFromUrl(options.runner.workflowRunUrl)
     });
-    return true;
+  } else {
+    options.logger.event("github.pr.review.start", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number
+    });
+    await createPullRequestReview({
+      body,
+      client: options.client,
+      comments,
+      commitId: options.context.reviewScope?.targetSha,
+      pullNumber: options.context.artifact.number,
+      repository: options.runner.repository,
+      token: options.runner.token
+    });
+    options.logger.event("github.pr.review.done", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number
+    });
   }
-  options.logger.event("github.pr.review.start", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number
-  });
-  await createPullRequestReview({
-    body,
-    client: options.client,
-    comments,
-    pullNumber: options.context.artifact.number,
-    repository: options.runner.repository,
-    token: options.runner.token
-  });
-  options.logger.event("github.pr.review.done", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number
-  });
+  await reconciliation?.apply();
   return true;
 }
 function shouldPublishPullRequestReview(options) {
@@ -55235,7 +55633,7 @@ async function editableReviewForStageResult(options) {
     if (item.kind !== "pull-request-review") continue;
     const reviewId = reviewDatabaseId(item.databaseId);
     if (!reviewId) continue;
-    const marker = parseStageResultMarker(item.body);
+    const marker = parseStageResultMarker2(item.body);
     if (marker?.artifact === options.context.artifact.type && marker.number === options.context.artifact.number && marker.stage === options.runner.stage && markerMatchesRun(marker, item.body, run) && reviewInlineCommentCount(item.body) === 0) {
       candidates.push({ author: item.author, reviewId });
     }
@@ -55256,7 +55654,7 @@ async function editableReviewForStageResult(options) {
   }
   return editableReview;
 }
-function parseStageResultMarker(body) {
+function parseStageResultMarker2(body) {
   const attributes = markerAttributes2(body, "git-vibe:stage-result");
   if (!attributes.stage || !attributes.artifact || !attributes.number) return void 0;
   return {
@@ -55305,43 +55703,62 @@ async function authenticatedGitHubLogin(options) {
   }
   return login;
 }
-async function reconcileReviewFindings(options) {
+async function planReviewFindingReconciliation(options) {
   const priorFindings = await priorReviewFindings(options);
-  if (!priorFindings.size) return { newFindings: options.findings };
   const commit = reviewedCommit(options.context);
-  const currentFindingIds = new Set(options.findings.map((finding) => finding.findingId));
+  const currentFindingIds2 = new Set(options.findings.map((finding) => finding.findingId));
+  const resolvedFindingIds = new Set(stringItems3(options.parsedOutput.resolved_finding_ids));
   const newFindings = [];
+  const updates = [];
   for (const finding of options.findings) {
     const prior = priorFindings.get(finding.findingId);
     if (!prior) {
       newFindings.push(finding);
       continue;
     }
-    await replyToPriorReviewFinding({
-      ...options,
-      body: stillPresentReviewFindingReply(finding.body, commit.label),
-      commit,
-      prior,
-      status: "still-present"
-    });
+    updates.push(
+      () => replyToPriorReviewFinding({
+        ...options,
+        body: stillPresentReviewFindingReply(finding.body, commit.label),
+        commit,
+        prior,
+        status: "still-present"
+      })
+    );
   }
   for (const prior of priorFindings.values()) {
-    if (currentFindingIds.has(prior.findingId)) continue;
-    await replyToPriorReviewFinding({
-      ...options,
-      body: outdatedReviewFindingReply(commit.label),
-      commit,
-      prior,
-      status: "outdated"
-    });
-    await resolveReviewThread({
-      client: options.client,
-      logger: options.logger,
-      reviewThreadId: prior.reviewThreadId,
-      token: options.runner.token
+    if (currentFindingIds2.has(prior.findingId)) continue;
+    if (options.context.reviewScope?.checkpointSha && !resolvedFindingIds.has(prior.findingId)) {
+      options.logger.event("github.pr.review_thread.reconcile.skip", {
+        finding: prior.findingId,
+        reason: "incremental-review-carried"
+      });
+      continue;
+    }
+    updates.push(async () => {
+      await replyToPriorReviewFinding({
+        ...options,
+        body: outdatedReviewFindingReply(commit.label),
+        commit,
+        prior,
+        status: "outdated"
+      });
+      await resolveReviewThread({
+        client: options.client,
+        logger: options.logger,
+        reviewThreadId: prior.reviewThreadId,
+        token: options.runner.token
+      });
     });
   }
-  return { newFindings };
+  return {
+    apply: async () => {
+      if (!updates.length) return;
+      await assertCurrentReviewTarget(options);
+      for (const update of updates) await update();
+    },
+    newFindings
+  };
 }
 async function priorReviewFindings(options) {
   const candidates = priorReviewFindingCandidates(options.context);
@@ -55554,7 +55971,7 @@ function outdatedReviewFindingReply(commitLabel) {
   return `This GitVibe finding is outdated after ${commitLabel}; the latest review no longer reports this issue.`;
 }
 function pullRequestReviewBody(options) {
-  const findings = stringItems2(options.output.findings);
+  const findings = stringItems3(options.output.findings);
   return cleanLines2([
     ...options.stageResultBody.split(/\r?\n/),
     ...reviewDetailsSection({
@@ -55602,7 +56019,7 @@ function fallbackWorkflowRunSection(body, url2) {
   if (!url2 || body.includes(`Workflow run: ${url2}`)) return [];
   return ["", `Workflow run: ${url2}`];
 }
-function stringItems2(value) {
+function stringItems3(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
 }
@@ -55641,6 +56058,7 @@ var resolveReviewThreadMutation = `
 var staleTransientStatusCommentAgeMs = 30 * 60 * 1e3;
 async function publishStageResultComment(options) {
   assertPullRequestReviewResultPublishable(options);
+  await assertCurrentReviewTarget(options);
   await cleanupStageStatusComments(options);
   const body = renderStageResultComment({
     context: options.context,
@@ -56181,48 +56599,6 @@ var gitVibeOwnedLinePatterns = [
   /(?:`[^`]+`|@[\w-]+) accepted (?:this )?prompt-injection input risk for one `?[\w-]+`? (?:run|rerun)\./g
 ];
 
-// src/shared/stage-result-markers.ts
-function parseStageResultMarker2(body) {
-  const match = String(body || "").match(/<!--\s*git-vibe:stage-result\s+([^>]*)-->/);
-  if (!match) return void 0;
-  const attributes = parseAttributes4(match[1] || "");
-  const artifact = artifactField2(attributes.artifact);
-  const number4 = stringField5(attributes.number);
-  if (!artifact || !number4 || !attributes.stage) return void 0;
-  try {
-    return {
-      artifact,
-      number: number4,
-      run: stringField5(attributes.run),
-      stage: parseStage(attributes.stage)
-    };
-  } catch {
-    return void 0;
-  }
-}
-function stageResultStatus(body) {
-  const line = String(body || "").split(/\r?\n/).find((value) => value.includes("**Status:**"));
-  return normalizedState(line?.match(/`([^`]+)`/)?.[1]);
-}
-function parseAttributes4(value) {
-  const attributes = {};
-  for (const match of value.matchAll(/([a-z][a-z-]*)=([^\s>]+)/g)) {
-    attributes[match[1] || ""] = match[2];
-  }
-  return attributes;
-}
-function artifactField2(value) {
-  if (value === "discussion" || value === "issue" || value === "pull-request") return value;
-  return void 0;
-}
-function normalizedState(value) {
-  return String(value || "").trim().toLowerCase().replaceAll("_", "-").replace(/\s+/g, "-");
-}
-function stringField5(value) {
-  const text = String(value || "").trim();
-  return text || void 0;
-}
-
 // src/runner/accepted-risk.ts
 var trustedAutomationAuthors = /* @__PURE__ */ new Set(["gitvibe-for-github[bot]"]);
 function acceptedRiskFromContext(options) {
@@ -56379,7 +56755,7 @@ function acceptedRiskMetadataCandidates(context, runner) {
   return context.timeline.map((item, order) => acceptedRiskMetadataCandidate(item, order, context, runner)).filter((candidate) => Boolean(candidate));
 }
 function acceptedRiskMetadataCandidate(item, order, context, runner) {
-  const marker = parseStageResultMarker2(item.body);
+  const marker = parseStageResultMarker(item.body);
   const metadata = parseAcceptedRiskMetadata(item.body);
   if (!marker || !metadata) return void 0;
   if (!trustedGitVibeTimelineItem(item)) return void 0;
@@ -56455,8 +56831,8 @@ function trustedGitVibeTimelineItem(item) {
   return trustedAutomationAuthors.has(String(item.author || "").toLowerCase());
 }
 function stringValue5(value) {
-  const text = String(value ?? "").trim();
-  return text || void 0;
+  const text2 = String(value ?? "").trim();
+  return text2 || void 0;
 }
 function acceptedRiskMetadataMatches(options) {
   return options.metadata.artifact === options.context.artifact.type && options.metadata.number === options.context.artifact.number && options.metadata.cutoff === options.accepted.cutoff && (!options.accepted.artifactContentSha || options.metadata.artifactContentSha === options.accepted.artifactContentSha) && (!options.accepted.run || options.metadata.run === options.accepted.run) && (!options.accepted.runAttempt || options.metadata.runAttempt === options.accepted.runAttempt) && options.metadata.stages.includes(options.runner.stage);
@@ -56536,6 +56912,22 @@ function parseAttributes5(value) {
   return attributes;
 }
 
+// src/runner/review-safety-attestation.ts
+function securityReviewResultWithAttestation(options) {
+  if (!options.context.reviewScope) return options.result;
+  return {
+    ...options.result,
+    inputSafetyDigest: reviewInputSafetyDigest(options),
+    reviewScope: options.context.reviewScope
+  };
+}
+function reviewInputSafetyDigest(options) {
+  return safetyContextDigest({
+    context: options.context,
+    ignoredAuthors: safetyIgnoredAuthors(options.config)
+  });
+}
+
 // src/runner/stage-runner.ts
 async function runStageSecurityReview(options) {
   const logger = createStageLogger(options.stage);
@@ -56561,14 +56953,28 @@ async function runStageSecurityReview(options) {
     transientComments
   });
   if (acceptedRisk) {
-    return acceptedRiskSecurityReview(safetyOptions, {
-      publishAudit: Boolean(options.acceptedRisk) || acceptedRiskLabelPresent(context) || Boolean(runner.acceptedRisk?.run)
+    return securityReviewResultWithAttestation({
+      config: config2,
+      context,
+      result: await acceptedRiskSecurityReview(safetyOptions, {
+        publishAudit: Boolean(options.acceptedRisk) || acceptedRiskLabelPresent(context) || Boolean(runner.acceptedRisk?.run)
+      })
     });
   }
   const inputSafetyResult = await blockPromptInput(safetyOptions);
-  if (inputSafetyResult) return blockedSecurityReview(inputSafetyResult);
+  if (inputSafetyResult) {
+    return securityReviewResultWithAttestation({
+      config: config2,
+      context,
+      result: blockedSecurityReview(inputSafetyResult)
+    });
+  }
   logger.event("security.review.done", { allowed: true });
-  return { allowed: true, status: "allowed", summary: "Security review passed." };
+  return securityReviewResultWithAttestation({
+    config: config2,
+    context,
+    result: { allowed: true, status: "allowed", summary: "Security review passed." }
+  });
 }
 async function blockAcceptedRiskDeltaInput(options) {
   const contextUnits = acceptedRiskContextUnits(
@@ -56625,15 +57031,14 @@ async function loadRunnerContext(options) {
     target: options.definition.target
   });
   const context = withStageHandoffs(
-    withSourceComment(
-      await contextFor({ client: options.client, options: options.options }),
-      options.options
-    ),
+    withSourceComment(await contextForStage(options.client, options.options), options.options),
     options.options.handoffDir
   );
   options.logger.event("context.load.done", {
     artifact: `${context.artifact.type}#${context.artifact.number}`,
     handoffs: context.handoffs?.length || 0,
+    review_checkpoint: context.reviewScope?.checkpointSha || "",
+    review_target: context.reviewScope?.targetSha || "",
     timeline_items: context.timeline.length
   });
   return context;
@@ -56669,45 +57074,6 @@ function stageSafetyOptions(options) {
     transientComments: options.transientComments
   };
 }
-async function contextFor({
-  client,
-  options
-}) {
-  const definition = stageDefinitions[options.stage];
-  if (options.stage === "validate" && process.env.GITVIBE_DISCUSSION_NUMBER && !options.issueNumber) {
-    return buildDiscussionContext({
-      client,
-      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER,
-      repository: options.repository,
-      token: options.token
-    });
-  }
-  if (definition.target === "discussion") {
-    const discussionNumber = process.env.GITVIBE_DISCUSSION_NUMBER || options.issueNumber;
-    return buildDiscussionContext({
-      client,
-      discussionNumber,
-      repository: options.repository,
-      token: options.token
-    });
-  }
-  if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
-    return buildIssueContext({
-      client,
-      issueNumber: options.prNumber,
-      repository: options.repository,
-      token: options.token,
-      type: "pull-request"
-    });
-  }
-  return buildIssueContext({
-    client,
-    issueNumber: definition.target === "pull-request" ? options.prNumber : options.issueNumber,
-    repository: options.repository,
-    token: options.token,
-    type: definition.target
-  });
-}
 function withSourceComment(context, options) {
   if (!options.sourceComment) return context;
   return { ...context, source: { ...context.source || {}, comment: options.sourceComment } };
@@ -56738,20 +57104,20 @@ function normalizeSourceComment(value) {
   const kind = String(value.kind || "");
   if (!sourceCommentKinds.has(kind)) return void 0;
   return {
-    body: stringField6(value.body),
-    id: stringField6(value.id),
+    body: stringField5(value.body),
+    id: stringField5(value.id),
     kind,
-    nodeId: stringField6(value.nodeId || value.node_id),
-    url: stringField6(value.url || value.html_url)
+    nodeId: stringField5(value.nodeId || value.node_id),
+    url: stringField5(value.url || value.html_url)
   };
 }
 function isObject3(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
-function stringField6(value) {
+function stringField5(value) {
   if (value === void 0 || value === null) return void 0;
-  const text = String(value).trim();
-  return text || void 0;
+  const text2 = String(value).trim();
+  return text2 || void 0;
 }
 
 // src/shared/hosted-app.ts
@@ -56822,8 +57188,8 @@ function requiredPermissionProfile(value) {
   throw new Error("GitHub App permission profile is required when requesting a hosted token.");
 }
 async function responseJson(response, label) {
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  const text2 = await response.text();
+  const data = text2 ? JSON.parse(text2) : {};
   if (!response.ok) {
     throw new Error(`${label} request failed: ${response.status}`);
   }
@@ -56890,6 +57256,9 @@ async function securityReview(runtime = {}) {
       maxTurns: 1,
       prNumber: target.prNumber,
       repository,
+      review: stage === "review-matrix" ? {
+        targetSha: envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || void 0
+      } : void 0,
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
       stageTimeoutMinutes: numberEnv(env, "GITVIBE_STAGE_TIMEOUT_MINUTES", 10),
@@ -56959,6 +57328,26 @@ function writeOutputs(env, result, appendFile) {
   writeOutput(env.GITHUB_OUTPUT, "allowed", result.allowed ? "true" : "false", appendFile);
   writeOutput(env.GITHUB_OUTPUT, "summary", result.summary, appendFile);
   writeOutput(env.GITHUB_OUTPUT, "status", result.status, appendFile);
+  if (result.inputSafetyDigest) {
+    writeOutput(env.GITHUB_OUTPUT, "input-safety-digest", result.inputSafetyDigest, appendFile);
+  }
+  if (result.reviewScope) {
+    writeOutput(env.GITHUB_OUTPUT, "base-sha", result.reviewScope.baseSha, appendFile);
+    writeOutput(
+      env.GITHUB_OUTPUT,
+      "checkpoint-sha",
+      result.reviewScope.checkpointSha || "",
+      appendFile
+    );
+    writeOutput(
+      env.GITHUB_OUTPUT,
+      "head-repository",
+      result.reviewScope.headRepository,
+      appendFile
+    );
+    writeOutput(env.GITHUB_OUTPUT, "snapshot-sha", result.reviewScope.snapshotSha, appendFile);
+    writeOutput(env.GITHUB_OUTPUT, "target-sha", result.reviewScope.targetSha, appendFile);
+  }
   if (result.result?.resultFile) {
     writeOutput(env.GITHUB_OUTPUT, "result-file", result.result.resultFile, appendFile);
   }

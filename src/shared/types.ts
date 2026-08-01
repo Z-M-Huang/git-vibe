@@ -8,6 +8,23 @@ export type SourceCommentKind =
   | "pull-request-review"
   | "pull-request-review-comment";
 
+export interface ReviewRunState {
+  baseSha?: string;
+  checkpointSha?: string;
+  inputSafetyDigest?: string;
+  snapshotSha?: string;
+  targetSha?: string;
+}
+
+export interface ReviewScope {
+  baseSha: string;
+  checkpointSha?: string;
+  checkpointSubmittedAt?: string;
+  headRepository: string;
+  snapshotSha: string;
+  targetSha: string;
+}
+
 export interface StageDefinition {
   promptDir: string;
   schemaFile: string;
@@ -37,6 +54,7 @@ export interface RunnerOptions {
   prNumber: string;
   profileName?: string;
   repository: string;
+  review?: ReviewRunState;
   roleName?: string;
   sourceComment?: SourceComment;
   stage: Stage;
@@ -135,6 +153,7 @@ export interface ContextPacket {
   generatedAt: string;
   handoffs?: StageHandoff[];
   pullRequestFiles?: PullRequestFile[];
+  reviewScope?: ReviewScope;
   repository: string;
   source?: {
     comment?: SourceComment;

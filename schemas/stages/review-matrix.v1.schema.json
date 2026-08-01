@@ -65,6 +65,16 @@
         }
       }
     },
+    "resolved_finding_ids": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "description": "Prior GitVibe finding IDs proven resolved at the current review target.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
+      }
+    },
     "questions": {
       "type": "array",
       "items": {

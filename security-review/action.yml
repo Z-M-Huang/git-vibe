@@ -45,6 +45,24 @@ outputs:
   result-file:
     description: Path to the persisted blocked result JSON file, when blocked.
     value: ${{ steps.review.outputs.result-file }}
+  base-sha:
+    description: Pull request base SHA bound to the review snapshot.
+    value: ${{ steps.review.outputs.base-sha }}
+  checkpoint-sha:
+    description: Last completed reviewed head SHA, or empty for a full review.
+    value: ${{ steps.review.outputs.checkpoint-sha }}
+  head-repository:
+    description: Repository containing the pull request head commit.
+    value: ${{ steps.review.outputs.head-repository }}
+  input-safety-digest:
+    description: Digest of the context approved by the input safety gate.
+    value: ${{ steps.review.outputs.input-safety-digest }}
+  snapshot-sha:
+    description: Digest of the immutable review file snapshot.
+    value: ${{ steps.review.outputs.snapshot-sha }}
+  target-sha:
+    description: Immutable pull request head SHA selected for the review.
+    value: ${{ steps.review.outputs.target-sha }}
 
 runs:
   using: composite
