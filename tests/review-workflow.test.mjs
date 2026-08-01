@@ -9,7 +9,7 @@ import { parse } from "yaml";
  */
 
 describe("GitVibe review workflow finalizer", () => {
-  it("fails on blocked and changes-required review results", () => {
+  it("fails on blocked results without failing completed changes-required reviews", () => {
     const workflow = /** @type {Workflow} */ (
       parse(readFileSync(".github/workflows/review.yml", "utf8"))
     );
@@ -17,10 +17,8 @@ describe("GitVibe review workflow finalizer", () => {
       (step) => step.uses === "./.git-vibe/actions/review-matrix",
     );
 
-    expect(reviewStep?.with).toMatchObject({
-      "fail-on-blocked": "true",
-      "fail-on-changes-required": "true",
-    });
+    expect(reviewStep?.with).toMatchObject({ "fail-on-blocked": "true" });
+    expect(reviewStep?.with).not.toHaveProperty("fail-on-changes-required");
   });
 
   it("freezes review scope internally without exposing review controls", () => {

@@ -288,5 +288,4 @@ jobs:
           max-turns: ${{ inputs.max_turns }}
           source-comment: ${{ inputs.source-comment }}
           fail-on-blocked: "true"
-          fail-on-changes-required: "true"
           execution-mode: finalizer

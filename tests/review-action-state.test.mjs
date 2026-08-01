@@ -2,6 +2,34 @@ import { describe, expect, it, vi } from "vitest";
 import { runAction } from "../src/runner/actions/run-action.ts";
 
 describe("GitVibe review action state", () => {
+  it("keeps completed changes-required review finalization successful by default", async () => {
+    const error = vi.fn();
+    const runStage = vi.fn().mockResolvedValue({
+      commentBody: "Changes required.",
+      parsedOutput: { next_state: "changes-required" },
+      schemaId: "review-matrix.v1",
+      status: "completed",
+      summary: "Changes required.",
+      validationErrors: [],
+    });
+
+    await expect(
+      runAction({
+        argv: ["review-matrix"],
+        env: {
+          GITHUB_REPOSITORY: "example/repo",
+          GITVIBE_EXECUTION_MODE: "finalizer",
+          GITVIBE_GITHUB_APP_TOKEN: "token",
+          GITVIBE_ISSUE_NUMBER: "12",
+        },
+        error,
+        runStage,
+      }),
+    ).resolves.toBe(0);
+
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it("passes frozen scope from internal workflow environment without a mode", async () => {
     const runStage = vi.fn().mockResolvedValue({
       commentBody: "",
