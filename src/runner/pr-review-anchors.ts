@@ -4,11 +4,13 @@ import type { PullRequestReviewComment } from "./pr-review-github.js";
 
 export interface ReviewFindingAnchorInput {
   body: string;
+  findingId: string;
   reviewComment: PullRequestReviewComment;
 }
 
 export interface UnanchoredReviewFinding {
   body: string;
+  findingId: string;
   line: number;
   path: string;
   reason: string;
@@ -175,6 +177,7 @@ function unanchoredReviewFinding(
 ): UnanchoredReviewFinding {
   return {
     body: finding.body,
+    findingId: finding.findingId,
     line: finding.reviewComment.line,
     path: finding.reviewComment.path,
     reason,

@@ -59204,13 +59204,28 @@ function normalizedFindingId(value) {
   const id2 = typeof value === "string" ? value.trim() : "";
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id2) ? id2 : void 0;
 }
+function reviewFindingMarker(id2) {
+  return `<!-- git-vibe:review-finding id=${id2} -->`;
+}
 function reviewFindingMarkerId(body) {
   const match = body.match(/<!--\s*git-vibe:review-finding\s+([^>]*)-->/);
   const id2 = match?.[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
   return normalizedFindingId(id2);
 }
+function reviewFindingUnanchoredMarker(id2) {
+  return `<!-- git-vibe:review-finding-unanchored id=${id2} -->`;
+}
+function reviewFindingUnanchoredMarkerIds(body) {
+  return [...body.matchAll(/<!--\s*git-vibe:review-finding-unanchored\s+([^>]*)-->/g)].flatMap(
+    (match) => {
+      const id2 = match[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
+      const normalized = normalizedFindingId(id2);
+      return normalized ? [normalized] : [];
+    }
+  );
+}
 function visibleReviewCommentBody(body) {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
+  return body.replace(/<!--\s*git-vibe:review-finding(?:-(?:unanchored|update))?\s+[^>]*-->\s*/g, "").trim();
 }
 
 // src/runner/review-matrix-output.ts
@@ -59280,9 +59295,64 @@ function priorFindingItems(context) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
     if (!gitVibeReviewAuthor3(item.author)) continue;
     const id2 = reviewFindingMarkerId(item.body);
-    if (id2) findings.set(id2, { body: visibleReviewCommentBody(item.body), id: id2, url: item.url });
+    if (id2) {
+      findings.set(id2, {
+        body: visibleReviewCommentBody(item.body),
+        id: id2,
+        source: "inline",
+        url: item.url
+      });
+    }
+  }
+  const review = checkpointReview(context);
+  if (!review) return findings;
+  const markedIds = reviewFindingUnanchoredMarkerIds(review.body);
+  const unanchoredIds = markedIds.length ? markedIds : legacyUnanchoredFindingIds(review.body, findings);
+  for (const id2 of unanchoredIds) {
+    if (findings.has(id2)) continue;
+    findings.set(id2, {
+      body: "Unanchored finding recorded by the previous GitVibe review.",
+      id: id2,
+      source: "unanchored",
+      url: review.url
+    });
   }
   return findings;
+}
+function checkpointReview(context) {
+  const scope = context.reviewScope;
+  if (!scope?.checkpointSha) return void 0;
+  const reviews = context.timeline.filter((item) => {
+    if (item.kind !== "pull-request-review" || !gitVibeReviewAuthor3(item.author)) return false;
+    if (scope.checkpointSubmittedAt && item.createdAt !== scope.checkpointSubmittedAt) return false;
+    const marker2 = parseStageResultMarker(item.body);
+    return marker2?.artifact === "pull-request" && marker2.baseSha === scope.baseSha && marker2.headSha === scope.checkpointSha && marker2.number === context.artifact.number && marker2.reviewVersion === reviewCheckpointVersion && marker2.stage === "review-matrix" && stageResultStatus(item.body) === "completed";
+  });
+  return reviews.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+}
+function legacyUnanchoredFindingIds(body, known) {
+  const unanchoredCount = markdownListItems(body, "Unanchored Inline Findings").length;
+  if (!unanchoredCount) return [];
+  const missing = [
+    ...new Set(
+      markdownListItems(body, "Required Fixes").flatMap((value) => {
+        const id2 = normalizedFindingId(value.replace(/^`([^`]+)`$/, "$1"));
+        return id2 && !known.has(id2) ? [id2] : [];
+      })
+    )
+  ];
+  return missing.length === unanchoredCount ? missing : [];
+}
+function markdownListItems(body, title) {
+  const lines = body.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `### ${title}`);
+  if (start < 0) return [];
+  const section = lines.slice(start + 1);
+  const end = section.findIndex((line) => /^###\s+/.test(line));
+  return (end < 0 ? section : section.slice(0, end)).flatMap((line) => {
+    const match = line.match(/^\d+\.\s+(.+?)\s*$/);
+    return match?.[1] ? [match[1]] : [];
+  });
 }
 function currentFindingIds(output) {
   if (!Array.isArray(output.inline_comments)) return /* @__PURE__ */ new Set();
@@ -59296,7 +59366,8 @@ function currentFindingIds(output) {
 }
 function carriedFindingText(finding) {
   const detail = finding.body.replace(/\s+/g, " ").trim().slice(0, 300);
-  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}`;
+  const marker2 = finding.source === "unanchored" ? ` ${reviewFindingUnanchoredMarker(finding.id)}` : "";
+  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}${marker2}`;
 }
 function gitVibeReviewAuthor3(value) {
   const login = value.trim().toLowerCase();
@@ -60220,6 +60291,7 @@ function sideHunks(index, comment) {
 function unanchoredReviewFinding(finding, reason) {
   return {
     body: finding.body,
+    findingId: finding.findingId,
     line: finding.reviewComment.line,
     path: finding.reviewComment.path,
     reason,
@@ -60653,9 +60725,6 @@ ${body}`;
 function isGitVibeAppReviewAuthor(login) {
   return gitVibeAppReviewAuthors.some((author) => sameGitHubLogin(login, author));
 }
-function reviewFindingMarker(id2) {
-  return `<!-- git-vibe:review-finding id=${id2} -->`;
-}
 function reviewFindingUpdateMarker(options) {
   return `<!-- git-vibe:review-finding-update id=${options.id} status=${options.status} sha=${options.sha} -->`;
 }
@@ -60739,7 +60808,7 @@ function unanchoredFindingsSection(findings) {
     "",
     "### Unanchored Inline Findings",
     ...findings.flatMap((finding, index) => [
-      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason})`,
+      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason}) ${reviewFindingUnanchoredMarker(finding.findingId)}`,
       ...finding.body.split(/\r?\n/).map((line) => `   ${line}`)
     ])
   ];

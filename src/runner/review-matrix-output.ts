@@ -1,16 +1,31 @@
 import { createHash } from "node:crypto";
 import {
+  parseStageResultMarker,
+  reviewCheckpointVersion,
+  stageResultStatus,
+} from "../shared/stage-result-markers.js";
+import {
   effectiveReviewFindingId,
+  normalizedFindingId,
   reviewFindingMarkerId,
+  reviewFindingUnanchoredMarker,
+  reviewFindingUnanchoredMarkerIds,
   visibleReviewCommentBody,
 } from "./review-finding-ids.js";
-import type { ContextPacket, JsonObject } from "../shared/types.js";
+import type { ContextPacket, JsonObject, TimelineItem } from "../shared/types.js";
 
 interface IndexedInlineComment {
   findingId: string;
   index: number;
   item: JsonObject;
   stableKey: string;
+}
+
+interface PriorFinding {
+  body: string;
+  id: string;
+  source: "inline" | "unanchored";
+  url: string;
 }
 
 export interface ReviewMatrixOutputNormalization {
@@ -95,17 +110,85 @@ function carryIncrementalFindings(
   };
 }
 
-function priorFindingItems(
-  context: ContextPacket,
-): Map<string, { body: string; id: string; url: string }> {
-  const findings = new Map<string, { body: string; id: string; url: string }>();
+function priorFindingItems(context: ContextPacket): Map<string, PriorFinding> {
+  const findings = new Map<string, PriorFinding>();
   for (const item of context.timeline) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
     if (!gitVibeReviewAuthor(item.author)) continue;
     const id = reviewFindingMarkerId(item.body);
-    if (id) findings.set(id, { body: visibleReviewCommentBody(item.body), id, url: item.url });
+    if (id) {
+      findings.set(id, {
+        body: visibleReviewCommentBody(item.body),
+        id,
+        source: "inline",
+        url: item.url,
+      });
+    }
+  }
+
+  const review = checkpointReview(context);
+  if (!review) return findings;
+  const markedIds = reviewFindingUnanchoredMarkerIds(review.body);
+  const unanchoredIds = markedIds.length
+    ? markedIds
+    : legacyUnanchoredFindingIds(review.body, findings);
+  for (const id of unanchoredIds) {
+    if (findings.has(id)) continue;
+    findings.set(id, {
+      body: "Unanchored finding recorded by the previous GitVibe review.",
+      id,
+      source: "unanchored",
+      url: review.url,
+    });
   }
   return findings;
+}
+
+function checkpointReview(context: ContextPacket): TimelineItem | undefined {
+  const scope = context.reviewScope;
+  if (!scope?.checkpointSha) return undefined;
+  const reviews = context.timeline.filter((item) => {
+    if (item.kind !== "pull-request-review" || !gitVibeReviewAuthor(item.author)) return false;
+    if (scope.checkpointSubmittedAt && item.createdAt !== scope.checkpointSubmittedAt) return false;
+    const marker = parseStageResultMarker(item.body);
+    return (
+      marker?.artifact === "pull-request" &&
+      marker.baseSha === scope.baseSha &&
+      marker.headSha === scope.checkpointSha &&
+      marker.number === context.artifact.number &&
+      marker.reviewVersion === reviewCheckpointVersion &&
+      marker.stage === "review-matrix" &&
+      stageResultStatus(item.body) === "completed"
+    );
+  });
+  return reviews.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+}
+
+function legacyUnanchoredFindingIds(body: string, known: Map<string, PriorFinding>): string[] {
+  const unanchoredCount = markdownListItems(body, "Unanchored Inline Findings").length;
+  if (!unanchoredCount) return [];
+  const missing = [
+    ...new Set(
+      markdownListItems(body, "Required Fixes").flatMap((value) => {
+        const id = normalizedFindingId(value.replace(/^`([^`]+)`$/, "$1"));
+        return id && !known.has(id) ? [id] : [];
+      }),
+    ),
+  ];
+  // Reviews published before unanchored markers can be recovered only when the mapping is unambiguous.
+  return missing.length === unanchoredCount ? missing : [];
+}
+
+function markdownListItems(body: string, title: string): string[] {
+  const lines = body.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `### ${title}`);
+  if (start < 0) return [];
+  const section = lines.slice(start + 1);
+  const end = section.findIndex((line) => /^###\s+/.test(line));
+  return (end < 0 ? section : section.slice(0, end)).flatMap((line) => {
+    const match = line.match(/^\d+\.\s+(.+?)\s*$/);
+    return match?.[1] ? [match[1]] : [];
+  });
 }
 
 function currentFindingIds(output: JsonObject): Set<string> {
@@ -119,9 +202,11 @@ function currentFindingIds(output: JsonObject): Set<string> {
   );
 }
 
-function carriedFindingText(finding: { body: string; id: string; url: string }): string {
+function carriedFindingText(finding: PriorFinding): string {
   const detail = finding.body.replace(/\s+/g, " ").trim().slice(0, 300);
-  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}`;
+  const marker =
+    finding.source === "unanchored" ? ` ${reviewFindingUnanchoredMarker(finding.id)}` : "";
+  return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}${marker}`;
 }
 
 function gitVibeReviewAuthor(value: string): boolean {

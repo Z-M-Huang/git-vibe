@@ -29,12 +29,32 @@ export function normalizedFindingId(value: unknown): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id) ? id : undefined;
 }
 
+export function reviewFindingMarker(id: string): string {
+  return `<!-- git-vibe:review-finding id=${id} -->`;
+}
+
 export function reviewFindingMarkerId(body: string): string | undefined {
   const match = body.match(/<!--\s*git-vibe:review-finding\s+([^>]*)-->/);
   const id = match?.[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
   return normalizedFindingId(id);
 }
 
+export function reviewFindingUnanchoredMarker(id: string): string {
+  return `<!-- git-vibe:review-finding-unanchored id=${id} -->`;
+}
+
+export function reviewFindingUnanchoredMarkerIds(body: string): string[] {
+  return [...body.matchAll(/<!--\s*git-vibe:review-finding-unanchored\s+([^>]*)-->/g)].flatMap(
+    (match) => {
+      const id = match[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
+      const normalized = normalizedFindingId(id);
+      return normalized ? [normalized] : [];
+    },
+  );
+}
+
 export function visibleReviewCommentBody(body: string): string {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
+  return body
+    .replace(/<!--\s*git-vibe:review-finding(?:-(?:unanchored|update))?\s+[^>]*-->\s*/g, "")
+    .trim();
 }

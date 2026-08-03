@@ -6,7 +6,9 @@ import { validateReviewFindingAnchors, type UnanchoredReviewFinding } from "./pr
 import {
   effectiveReviewFindingId,
   normalizedFindingId,
+  reviewFindingMarker,
   reviewFindingMarkerId,
+  reviewFindingUnanchoredMarker,
   visibleReviewCommentBody,
 } from "./review-finding-ids.js";
 import {
@@ -517,10 +519,6 @@ function isGitVibeAppReviewAuthor(login: string): boolean {
   return gitVibeAppReviewAuthors.some((author) => sameGitHubLogin(login, author));
 }
 
-function reviewFindingMarker(id: string): string {
-  return `<!-- git-vibe:review-finding id=${id} -->`;
-}
-
 function reviewFindingUpdateMarker(options: {
   id: string;
   sha: string;
@@ -637,7 +635,7 @@ function unanchoredFindingsSection(findings: UnanchoredReviewFinding[]): string[
     "",
     "### Unanchored Inline Findings",
     ...findings.flatMap((finding, index) => [
-      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason})`,
+      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason}) ${reviewFindingUnanchoredMarker(finding.findingId)}`,
       ...finding.body.split(/\r?\n/).map((line) => `   ${line}`),
     ]),
   ];

@@ -24,7 +24,100 @@ describe("incremental review finding obligations", () => {
     expect(normalized.output.next_state).toBe("review-passed");
     expect(normalized.output.findings).toEqual([]);
   });
+});
 
+describe("incremental review unanchored finding obligations", () => {
+  it("tracks unanchored findings from the exact checkpoint review", () => {
+    const reviewContext = contextWithCheckpointReview(
+      [
+        "### Unanchored Inline Findings",
+        "1. `src/app.ts:9` (line is not in the pull request diff) <!-- git-vibe:review-finding-unanchored id=review-unanchored -->",
+        "   Null values still crash this unchanged path.",
+      ].join("\n"),
+    );
+
+    const carried = normalizeReviewMatrixOutput(
+      { ...output(), resolved_finding_ids: ["review-1"] },
+      reviewContext,
+    );
+    expect(carried.carriedFindings).toBe(1);
+    expect(carried.output.findings).toEqual([
+      expect.stringContaining("<!-- git-vibe:review-finding-unanchored id=review-unanchored -->"),
+    ]);
+
+    const resolved = normalizeReviewMatrixOutput(
+      { ...output(), resolved_finding_ids: ["review-1", "review-unanchored"] },
+      reviewContext,
+    );
+    expect(resolved.carriedFindings).toBe(0);
+    expect(resolved.output.findings).toEqual([]);
+  });
+
+  it("recovers legacy unanchored IDs only when the mapping is unambiguous", () => {
+    const reviewContext = contextWithCheckpointReview(
+      [
+        "### Required Fixes",
+        "1. review-1",
+        "2. memory-pack-predicate-key-bounds",
+        "",
+        "### Unanchored Inline Findings",
+        "1. `internal/service/memory_pack.go:42` (line is not in the pull request diff)",
+        "   Predicate keys need the public contract bound.",
+      ].join("\n"),
+    );
+
+    const normalized = normalizeReviewMatrixOutput(
+      {
+        ...output(),
+        resolved_finding_ids: ["review-1", "memory-pack-predicate-key-bounds"],
+      },
+      reviewContext,
+    );
+
+    expect(normalized.carriedFindings).toBe(0);
+    expect(normalized.output.next_state).toBe("review-passed");
+  });
+
+  it("ignores unanchored markers outside the exact checkpoint review", () => {
+    const reviewContext = contextWithCheckpointReview(
+      "<!-- git-vibe:review-finding-unanchored id=stale-unanchored -->",
+    );
+    const review = reviewContext.timeline.find((item) => item.kind === "pull-request-review");
+    if (!review) throw new Error("Expected checkpoint review.");
+    review.createdAt = "2026-07-31T02:00:00Z";
+
+    expect(() =>
+      normalizeReviewMatrixOutput(
+        { ...output(), resolved_finding_ids: ["stale-unanchored"] },
+        reviewContext,
+      ),
+    ).toThrow("resolved_finding_ids contains unknown finding: stale-unanchored");
+  });
+
+  it("rejects ambiguous legacy unanchored ID mappings", () => {
+    const reviewContext = contextWithCheckpointReview(
+      [
+        "### Required Fixes",
+        "1. review-1",
+        "2. possible-unanchored-1",
+        "3. possible-unanchored-2",
+        "",
+        "### Unanchored Inline Findings",
+        "1. `src/app.ts:9` (line is not in the pull request diff)",
+        "   One unanchored finding cannot identify two missing IDs.",
+      ].join("\n"),
+    );
+
+    expect(() =>
+      normalizeReviewMatrixOutput(
+        { ...output(), resolved_finding_ids: ["possible-unanchored-1"] },
+        reviewContext,
+      ),
+    ).toThrow("resolved_finding_ids contains unknown finding: possible-unanchored-1");
+  });
+});
+
+describe("incremental review finding ID validation", () => {
   it("rejects unknown or simultaneously current and resolved finding ids", () => {
     expect(() =>
       normalizeReviewMatrixOutput({ ...output(), resolved_finding_ids: ["unknown"] }, context()),
@@ -88,4 +181,28 @@ function context() {
       },
     ],
   };
+}
+
+/**
+ * @param {string} details
+ * @returns {ContextPacket}
+ */
+function contextWithCheckpointReview(details) {
+  const value = context();
+  const submittedAt = "2026-07-31T01:00:00Z";
+  if (!value.reviewScope) throw new Error("Expected incremental review scope.");
+  value.reviewScope.checkpointSubmittedAt = submittedAt;
+  value.timeline.push({
+    author: "gitvibe-for-github[bot]",
+    body: [
+      `<!-- git-vibe:stage-result stage=review-matrix artifact=pull-request number=12 review-version=1 base-sha=${"a".repeat(40)} head-sha=${"b".repeat(40)} snapshot-sha=${"e".repeat(64)} -->`,
+      "**Status:** `completed`",
+      details,
+    ].join("\n"),
+    createdAt: submittedAt,
+    id: "review-1",
+    kind: "pull-request-review",
+    url: "https://github.com/example/repo/pull/12#pullrequestreview-1",
+  });
+  return value;
 }

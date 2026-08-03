@@ -167,8 +167,18 @@ describe("pull request review anchor validation unanchored lines", () => {
       parsedOutput: {
         ...output(),
         inline_comments: [
-          { body: "Anchored finding.", line: 42, path: "src/app.ts" },
-          { body: "Unanchored finding.", line: 99, path: "src/app.ts" },
+          {
+            body: "Anchored finding.",
+            finding_id: "anchored-finding",
+            line: 42,
+            path: "src/app.ts",
+          },
+          {
+            body: "Unanchored finding.",
+            finding_id: "unanchored-finding",
+            line: 99,
+            path: "src/app.ts",
+          },
         ],
         next_state: "changes-required",
         stage: "review-matrix",
@@ -181,6 +191,9 @@ describe("pull request review anchor validation unanchored lines", () => {
     expect(review.body.comments).toHaveLength(1);
     expect(review.body.body).toContain("### Unanchored Inline Findings");
     expect(review.body.body).toContain("`src/app.ts:99` (line is not in the pull request diff)");
+    expect(review.body.body).toContain(
+      "<!-- git-vibe:review-finding-unanchored id=unanchored-finding -->",
+    );
     expect(review.body.body).toContain("Unanchored finding.");
   });
 });
@@ -197,7 +210,12 @@ describe("pull request review anchor validation lookup failures", () => {
       parsedOutput: {
         ...output(),
         inline_comments: [
-          { body: "Could not validate this anchor.", line: 42, path: "src/app.ts" },
+          {
+            body: "Could not validate this anchor.",
+            finding_id: "anchor-lookup-failure",
+            line: 42,
+            path: "src/app.ts",
+          },
         ],
         next_state: "changes-required",
         stage: "review-matrix",
@@ -209,6 +227,9 @@ describe("pull request review anchor validation lookup failures", () => {
     const review = reviewRequest(client);
     expect(review.body.comments).toBeUndefined();
     expect(review.body.body).toContain("`src/app.ts:42` (patch lookup failed)");
+    expect(review.body.body).toContain(
+      "<!-- git-vibe:review-finding-unanchored id=anchor-lookup-failure -->",
+    );
     expect(logger.event).toHaveBeenCalledWith("github.pr.review.anchors.lookup.failed", {
       comments: 1,
       error: expect.stringContaining("files unavailable"),
