@@ -3,10 +3,16 @@ import type { Stage } from "./types.js";
 
 export interface StageResultMarker {
   artifact: "discussion" | "issue" | "pull-request";
+  baseSha?: string;
+  headSha?: string;
+  reviewVersion?: string;
   number: string;
   run?: string;
+  snapshotSha?: string;
   stage: Stage;
 }
+
+export const reviewCheckpointVersion = "1";
 
 export function parseStageResultMarker(
   body: string | null | undefined,
@@ -20,10 +26,19 @@ export function parseStageResultMarker(
   if (!artifact || !number || !attributes.stage) return undefined;
 
   try {
+    const baseSha = stringField(attributes["base-sha"]);
+    const headSha = stringField(attributes["head-sha"]);
+    const reviewVersion = stringField(attributes["review-version"]);
+    const run = stringField(attributes.run);
+    const snapshotSha = stringField(attributes["snapshot-sha"]);
     return {
       artifact,
+      ...(baseSha ? { baseSha } : {}),
+      ...(headSha ? { headSha } : {}),
+      ...(reviewVersion ? { reviewVersion } : {}),
       number,
-      run: stringField(attributes.run),
+      ...(run ? { run } : {}),
+      ...(snapshotSha ? { snapshotSha } : {}),
       stage: parseStage(attributes.stage),
     };
   } catch {

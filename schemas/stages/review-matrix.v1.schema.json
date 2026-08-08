@@ -38,6 +38,7 @@
     "inline_comments": {
       "type": "array",
       "maxItems": 50,
+      "description": "GitHub pull request review comments. Every finding_id must be unique within this array.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -62,6 +63,16 @@
           "body": { "type": "string", "minLength": 1 },
           "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] }
         }
+      }
+    },
+    "resolved_finding_ids": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "description": "Currently unresolved prior GitVibe finding IDs proven resolved at the current review target. IDs in github_context.resolvedReviewFindingIds are already closed and must not be repeated.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
       }
     },
     "questions": {

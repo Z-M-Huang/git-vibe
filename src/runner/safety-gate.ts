@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ContextPacket, GitVibeConfig, JsonObject, RunnerOptions } from "../shared/types.js";
 import { contentUnitsForContext, type ContentUnit } from "./content-units.js";
 
@@ -52,6 +53,23 @@ export function safetyGateSources(options: {
       safetySourceUnit(source, `extra-source-${index}`),
     ),
   ].filter((source) => source.text.trim());
+}
+
+export function safetyContextDigest(options: {
+  context: ContextPacket;
+  ignoredAuthors?: readonly string[];
+}): string {
+  const sources = safetyContextUnits({
+    context: options.context,
+    ignoredAuthors: options.ignoredAuthors,
+  });
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        sources.map((source) => ({ id: source.id, label: source.label, text: source.text })),
+      ),
+    )
+    .digest("hex");
 }
 
 function sanitizedSafetyContextUnits(units: ContentUnit[]): ContentUnit[] {

@@ -1,4 +1,4 @@
-FROM node:22.22.3-trixie-slim AS build
+FROM node:24.18.0-trixie-slim AS build
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY . .
 RUN corepack pnpm build:app
 RUN CI=true corepack pnpm prune --prod --ignore-scripts
 
-FROM node:22.22.3-trixie-slim AS runtime
+FROM node:24.18.0-trixie-slim AS runtime
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -25,5 +25,7 @@ COPY --from=build /app/dist/app ./dist/app
 COPY --from=build /app/dist/shared ./dist/shared
 
 EXPOSE 3000
+
+USER node
 
 CMD ["node", "dist/app/server.js"]

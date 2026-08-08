@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +45,60 @@ describe("stageRunResult", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  it("persists stable unique IDs for duplicate review finding anchors", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "git-vibe-stage-result-"));
+    process.env.RUNNER_TEMP = directory;
+    const logger = { event: vi.fn() };
+    const inlineComments = [
+      reviewComment("src/z.ts", 9, "lease-placement-race"),
+      reviewComment("src/a.ts", 4, "lease-placement-race"),
+      reviewComment("src/unique.ts", 7, "unique-finding"),
+    ];
+
+    try {
+      const first = await runReviewStageResult(directory, inlineComments, logger);
+      const second = await runReviewStageResult(directory, [...inlineComments].reverse(), logger);
+      const firstIds = findingIdsByPath(first.parsedOutput);
+      const secondIds = findingIdsByPath(second.parsedOutput);
+
+      expect(firstIds).toEqual(secondIds);
+      expect(new Set(Object.values(firstIds))).toHaveProperty("size", 3);
+      expect(firstIds["src/a.ts"]).toBe("lease-placement-race");
+      expect(firstIds["src/z.ts"]).toMatch(/^lease-placement-race:[a-f0-9]{16}$/);
+      expect(firstIds["src/unique.ts"]).toBe("unique-finding");
+      expect(logger.event).toHaveBeenCalledWith("output.inline_comments.normalized", {
+        duplicate_finding_ids: 1,
+        rewritten_inline_comments: 1,
+      });
+
+      const persisted = JSON.parse(readFileSync(second.resultFile, "utf8"));
+      expect(findingIdsByPath(persisted.parsedOutput)).toEqual(secondIds);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("persists review results that repeat an already resolved finding ID", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "git-vibe-stage-result-"));
+    const previousRunnerTemp = process.env.RUNNER_TEMP;
+    process.env.RUNNER_TEMP = directory;
+    const logger = { event: vi.fn() };
+
+    try {
+      const result = await runAlreadyResolvedReviewStageResult(directory, logger);
+
+      expect(result.parsedOutput.resolved_finding_ids).toEqual([]);
+      expect(existsSync(result.resultFile)).toBe(true);
+      expect(logger.event).toHaveBeenCalledWith("output.resolved_finding_ids.normalized", {
+        already_resolved_finding_ids: 1,
+      });
+    } finally {
+      if (previousRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+      else process.env.RUNNER_TEMP = previousRunnerTemp;
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });
 
 function runValidateStageResult(cwd) {
@@ -84,4 +138,110 @@ function runValidateStageResult(cwd) {
       token: "token",
     },
   });
+}
+
+function runReviewStageResult(cwd, inlineComments, logger) {
+  return stageRunResult({
+    content: JSON.stringify({
+      assumptions: [],
+      comment_body: "Required fixes.",
+      findings: ["Placement can race with review."],
+      inline_comments: inlineComments,
+      next_state: "changes-required",
+      references: ["src/a.ts", "src/z.ts"],
+      stage: "review-matrix",
+      status: "completed",
+      summary: "Review found a race.",
+    }),
+    context: {
+      artifact: {
+        body: "Body",
+        number: "12",
+        title: "Pull request",
+        type: "pull-request",
+        url: "https://github.com/example/repo/pull/12",
+      },
+      generatedAt: "2026-01-01T00:00:00Z",
+      repository: "example/repo",
+      timeline: [],
+    },
+    definition: stageDefinitions["review-matrix"],
+    logger,
+    options: {
+      cwd,
+      dryRun: false,
+      maxTurns: 2,
+      prNumber: "12",
+      repository: "example/repo",
+      stage: "review-matrix",
+      stageTimeoutMinutes: 1,
+      token: "token",
+    },
+  });
+}
+
+function runAlreadyResolvedReviewStageResult(cwd, logger) {
+  return stageRunResult({
+    content: JSON.stringify({
+      assumptions: [],
+      comment_body: "No required fixes.",
+      findings: [],
+      inline_comments: [],
+      next_state: "review-passed",
+      references: [],
+      resolved_finding_ids: ["resolved-review"],
+      stage: "review-matrix",
+      status: "completed",
+      summary: "Review passed.",
+      tests: [],
+    }),
+    context: {
+      artifact: {
+        body: "Body",
+        number: "12",
+        title: "Pull request",
+        type: "pull-request",
+        url: "https://github.com/example/repo/pull/12",
+      },
+      generatedAt: "2026-01-01T00:00:00Z",
+      repository: "example/repo",
+      resolvedReviewFindingIds: ["resolved-review"],
+      reviewScope: {
+        baseSha: "a".repeat(40),
+        checkpointSha: "b".repeat(40),
+        headRepository: "example/repo",
+        snapshotSha: "c".repeat(64),
+        targetSha: "d".repeat(40),
+      },
+      timeline: [],
+    },
+    definition: stageDefinitions["review-matrix"],
+    logger,
+    options: {
+      cwd,
+      dryRun: false,
+      maxTurns: 2,
+      prNumber: "12",
+      repository: "example/repo",
+      stage: "review-matrix",
+      stageTimeoutMinutes: 1,
+      token: "token",
+    },
+  });
+}
+
+function reviewComment(path, line, findingId) {
+  return {
+    body: `Fix the race at ${path}:${line}.`,
+    finding_id: findingId,
+    line,
+    path,
+    side: "RIGHT",
+  };
+}
+
+function findingIdsByPath(output) {
+  return Object.fromEntries(
+    output.inline_comments.map((comment) => [comment.path, comment.finding_id]),
+  );
 }

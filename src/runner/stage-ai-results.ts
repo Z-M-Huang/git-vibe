@@ -134,7 +134,7 @@ async function runMatrixFinalizerResult({
       isolateWorkspace: true,
       profileName: plan.synthesizerProfile,
       prompt,
-      system: synthesizerSystemPrompt(),
+      system: synthesizerSystemPrompt(options.stage),
       toolOverride: [],
     }),
     context,

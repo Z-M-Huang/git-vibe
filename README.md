@@ -12,7 +12,7 @@
   <a href="https://github.com/markhuangai/git-vibe"><img src="https://img.shields.io/github/stars/markhuangai/git-vibe?style=flat-square&logo=github" alt="GitHub stars" /></a>
   <a href="https://github.com/markhuangai/git-vibe/issues"><img src="https://img.shields.io/github/issues/markhuangai/git-vibe?style=flat-square&logo=github" alt="GitHub issues" /></a>
   <a href="https://github.com/markhuangai/git-vibe/blob/main/LICENSE"><img src="https://img.shields.io/github/license/markhuangai/git-vibe?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/node-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22" />
+  <img src="https://img.shields.io/badge/node-24-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 24" />
   <img src="https://img.shields.io/badge/pnpm-10.33.3-F69220?style=flat-square&logo=pnpm&logoColor=white" alt="pnpm 10.33.3" />
 </p>
 
@@ -82,7 +82,7 @@ implementation, review, and release decisions.
 | `review.yml`      | Review an existing pull request with the configured review matrix     | No              |
 | `ai-smoke.yml`    | Verify configured SDK adapters on a runner                            | No repo changes |
 
-The reusable workflows install Node `22` and pnpm `10.33.3` before building the
+The reusable workflows install Node `24` and pnpm `10.33.3` before building the
 source-backed composite actions. Each composite action then reads
 `.github/git-vibe.yml` for its stage and runs the selected `codex-sdk` or
 `claude-code-sdk` profile directly through its SDK adapter.

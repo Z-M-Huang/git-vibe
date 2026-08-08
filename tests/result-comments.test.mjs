@@ -151,6 +151,31 @@ describe("pull request feedback result comments", () => {
   });
 });
 
+describe("review checkpoint result comments", () => {
+  it("binds completed review results to the reviewed SHA range", () => {
+    const reviewContext = {
+      ...context("pull-request"),
+      reviewScope: {
+        baseSha: "a".repeat(40),
+        checkpointSha: "b".repeat(40),
+        headRepository: "contributor/repo",
+        snapshotSha: "c".repeat(64),
+        targetSha: "d".repeat(40),
+      },
+    };
+    const body = renderStageResultComment({
+      context: reviewContext,
+      parsedOutput: { next_state: "review-passed", status: "completed", summary: "Passed." },
+      stage: "review-matrix",
+    });
+
+    expect(body).toContain(
+      `review-version=1 base-sha=${reviewContext.reviewScope.baseSha} head-sha=${reviewContext.reviewScope.targetSha} snapshot-sha=${reviewContext.reviewScope.snapshotSha}`,
+    );
+    expect(body).not.toContain("review-mode");
+  });
+});
+
 describe("stage start comments", () => {
   it("renders start markers and optional workflow links", () => {
     const body = renderStageStartComment({

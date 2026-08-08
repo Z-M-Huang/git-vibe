@@ -1,14 +1,22 @@
-import { createHash } from "node:crypto";
 import { GitHubClient, isGitHubGraphQLForbiddenError, splitRepository } from "../shared/github.js";
 import { workflowRunIdFromUrl } from "../shared/status-comments.js";
 import type { ContextPacket, JsonObject, RunnerOptions } from "../shared/types.js";
 import type { StageLogger } from "./logging.js";
 import { validateReviewFindingAnchors, type UnanchoredReviewFinding } from "./pr-review-anchors.js";
 import {
+  effectiveReviewFindingId,
+  normalizedFindingId,
+  reviewFindingMarker,
+  reviewFindingMarkerId,
+  reviewFindingUnanchoredMarker,
+  visibleReviewCommentBody,
+} from "./review-finding-ids.js";
+import {
   createPullRequestReview,
   type PullRequestReviewComment,
   updatePullRequestReview,
 } from "./pr-review-github.js";
+import { assertCurrentReviewTarget } from "./review-target.js";
 
 interface ReviewFindingComment {
   body: string;
@@ -56,9 +64,10 @@ export async function publishPullRequestReviewResult(options: {
   if (!shouldPublishPullRequestReview(options)) return false;
 
   const findings = reviewFindingComments(options.parsedOutput.inline_comments);
-  const newFindings = shouldReconcileReviewFindings(options.parsedOutput)
-    ? (await reconcileReviewFindings({ ...options, findings })).newFindings
-    : findings;
+  const reconciliation = shouldReconcileReviewFindings(options.parsedOutput)
+    ? await planReviewFindingReconciliation({ ...options, findings })
+    : undefined;
+  const newFindings = reconciliation?.newFindings || findings;
   const validated = await validateReviewFindingAnchors({
     client: options.client,
     findings: newFindings,
@@ -76,6 +85,7 @@ export async function publishPullRequestReviewResult(options: {
     workflowRunUrl: options.runner.workflowRunUrl,
   });
   const existingReview = await editableReviewForStageResult({ ...options, comments });
+  await assertCurrentReviewTarget(options);
   if (existingReview) {
     options.logger.event("github.pr.review.update.start", {
       pull_request: options.context.artifact.number,
@@ -95,25 +105,26 @@ export async function publishPullRequestReviewResult(options: {
       review: existingReview.reviewId,
       run: workflowRunIdFromUrl(options.runner.workflowRunUrl),
     });
-    return true;
+  } else {
+    options.logger.event("github.pr.review.start", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number,
+    });
+    await createPullRequestReview({
+      body,
+      client: options.client,
+      comments,
+      commitId: options.context.reviewScope?.targetSha,
+      pullNumber: options.context.artifact.number,
+      repository: options.runner.repository,
+      token: options.runner.token,
+    });
+    options.logger.event("github.pr.review.done", {
+      comments: comments.length,
+      pull_request: options.context.artifact.number,
+    });
   }
-
-  options.logger.event("github.pr.review.start", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number,
-  });
-  await createPullRequestReview({
-    body,
-    client: options.client,
-    comments,
-    pullNumber: options.context.artifact.number,
-    repository: options.runner.repository,
-    token: options.runner.token,
-  });
-  options.logger.event("github.pr.review.done", {
-    comments: comments.length,
-    pull_request: options.context.artifact.number,
-  });
+  await reconciliation?.apply();
   return true;
 }
 
@@ -241,19 +252,20 @@ async function authenticatedGitHubLogin(options: {
   return login;
 }
 
-async function reconcileReviewFindings(options: {
+async function planReviewFindingReconciliation(options: {
   client: GitHubClient;
   context: ContextPacket;
   findings: ReviewFindingComment[];
   logger: StageLogger;
+  parsedOutput: JsonObject;
   runner: RunnerOptions;
-}): Promise<{ newFindings: ReviewFindingComment[] }> {
+}): Promise<{ apply: () => Promise<void>; newFindings: ReviewFindingComment[] }> {
   const priorFindings = await priorReviewFindings(options);
-  if (!priorFindings.size) return { newFindings: options.findings };
-
   const commit = reviewedCommit(options.context);
   const currentFindingIds = new Set(options.findings.map((finding) => finding.findingId));
+  const resolvedFindingIds = new Set(stringItems(options.parsedOutput.resolved_finding_ids));
   const newFindings: ReviewFindingComment[] = [];
+  const updates: Array<() => Promise<void>> = [];
 
   for (const finding of options.findings) {
     const prior = priorFindings.get(finding.findingId);
@@ -261,33 +273,51 @@ async function reconcileReviewFindings(options: {
       newFindings.push(finding);
       continue;
     }
-    await replyToPriorReviewFinding({
-      ...options,
-      body: stillPresentReviewFindingReply(finding.body, commit.label),
-      commit,
-      prior,
-      status: "still-present",
-    });
+    updates.push(() =>
+      replyToPriorReviewFinding({
+        ...options,
+        body: stillPresentReviewFindingReply(finding.body, commit.label),
+        commit,
+        prior,
+        status: "still-present",
+      }),
+    );
   }
 
   for (const prior of priorFindings.values()) {
     if (currentFindingIds.has(prior.findingId)) continue;
-    await replyToPriorReviewFinding({
-      ...options,
-      body: outdatedReviewFindingReply(commit.label),
-      commit,
-      prior,
-      status: "outdated",
-    });
-    await resolveReviewThread({
-      client: options.client,
-      logger: options.logger,
-      reviewThreadId: prior.reviewThreadId,
-      token: options.runner.token,
+    if (options.context.reviewScope?.checkpointSha && !resolvedFindingIds.has(prior.findingId)) {
+      options.logger.event("github.pr.review_thread.reconcile.skip", {
+        finding: prior.findingId,
+        reason: "incremental-review-carried",
+      });
+      continue;
+    }
+    updates.push(async () => {
+      await replyToPriorReviewFinding({
+        ...options,
+        body: outdatedReviewFindingReply(commit.label),
+        commit,
+        prior,
+        status: "outdated",
+      });
+      await resolveReviewThread({
+        client: options.client,
+        logger: options.logger,
+        reviewThreadId: prior.reviewThreadId,
+        token: options.runner.token,
+      });
     });
   }
 
-  return { newFindings };
+  return {
+    apply: async () => {
+      if (!updates.length) return;
+      await assertCurrentReviewTarget(options);
+      for (const update of updates) await update();
+    },
+    newFindings,
+  };
 }
 
 async function priorReviewFindings(options: {
@@ -317,7 +347,7 @@ function priorReviewFindingCandidates(
   const candidates: Array<Omit<PriorReviewFinding, "updateKeys"> & { author: string }> = [];
   for (const item of context.timeline) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
-    const findingId = parseReviewFindingMarker(item.body)?.id;
+    const findingId = reviewFindingMarkerId(item.body);
     const reviewThreadId = stringField(item.reviewThreadId);
     const commentDatabaseId = reviewCommentDatabaseId(item.databaseId);
     if (!findingId || !reviewThreadId || !commentDatabaseId) continue;
@@ -473,10 +503,14 @@ function reviewFindingComment(value: unknown, index: number): ReviewFindingComme
       `review-matrix inline_comments[${index}].finding_id must match the allowed pattern.`,
     );
   }
-  const findingId =
-    normalizedExplicitFindingId ||
-    parseReviewFindingMarker(rawBody)?.id ||
-    generatedFindingId({ body, line, path, startLine });
+  const findingId = effectiveReviewFindingId({
+    body,
+    explicitFindingId,
+    line,
+    path,
+    rawBody,
+    startLine,
+  });
   reviewComment.body = `${reviewFindingMarker(findingId)}\n${body}`;
   return { body, findingId, reviewComment };
 }
@@ -485,21 +519,12 @@ function isGitVibeAppReviewAuthor(login: string): boolean {
   return gitVibeAppReviewAuthors.some((author) => sameGitHubLogin(login, author));
 }
 
-function reviewFindingMarker(id: string): string {
-  return `<!-- git-vibe:review-finding id=${id} -->`;
-}
-
 function reviewFindingUpdateMarker(options: {
   id: string;
   sha: string;
   status: ReviewFindingUpdateStatus;
 }): string {
   return `<!-- git-vibe:review-finding-update id=${options.id} status=${options.status} sha=${options.sha} -->`;
-}
-
-function parseReviewFindingMarker(body: string): { id: string } | undefined {
-  const id = normalizedFindingId(markerAttributes(body, "git-vibe:review-finding").id);
-  return id ? { id } : undefined;
 }
 
 function parseReviewFindingUpdateMarker(
@@ -534,27 +559,6 @@ function reviewFindingUpdateKey(options: {
   status: ReviewFindingUpdateStatus;
 }): string {
   return `${options.id}:${options.status}:${options.sha}`;
-}
-
-function visibleReviewCommentBody(body: string): string {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-update)?\s+[^>]*-->\s*/g, "").trim();
-}
-
-function generatedFindingId(options: {
-  body: string;
-  line: number;
-  path: string;
-  startLine?: number;
-}): string {
-  const fingerprint = [options.path, options.startLine || "", options.line, options.body]
-    .map((part) => String(part).trim())
-    .join("\0");
-  return `gv-${createHash("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
-}
-
-function normalizedFindingId(value: unknown): string | undefined {
-  const id = stringField(value);
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id) ? id : undefined;
 }
 
 function normalizedFindingMarkerValue(value: unknown): string | undefined {
@@ -631,7 +635,7 @@ function unanchoredFindingsSection(findings: UnanchoredReviewFinding[]): string[
     "",
     "### Unanchored Inline Findings",
     ...findings.flatMap((finding, index) => [
-      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason})`,
+      `${index + 1}. \`${finding.path}:${lineRange(finding)}\` (${finding.reason}) ${reviewFindingUnanchoredMarker(finding.findingId)}`,
       ...finding.body.split(/\r?\n/).map((line) => `   ${line}`),
     ]),
   ];

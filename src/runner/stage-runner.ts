@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunAiStageOptions } from "./ai.js";
 import { loadConfig } from "./config.js";
-import { buildDiscussionContext, buildIssueContext } from "./context.js";
+import { contextForStage } from "./context.js";
 import { GitHubClient } from "../shared/github.js";
 import { withStageHandoffs } from "./handoffs.js";
 import type { StageLogger } from "./logging.js";
@@ -42,6 +42,11 @@ import {
 import { stageContract } from "./stage-dry-run.js";
 import { repositoryContext } from "./stage-git.js";
 import { applyDeterministicWrites } from "./stage-writes.js";
+import {
+  reuseReviewInputSafetyAttestation,
+  securityReviewResultWithAttestation,
+  type StageSecurityReviewResult,
+} from "./review-safety-attestation.js";
 import { stageDefinitions } from "../shared/stages.js";
 import type {
   ContextPacket,
@@ -59,13 +64,6 @@ type StageSafetyOptions = Omit<
 type StageAiPreparation =
   | { aiRunOptions: RunAiStageOptions; status: "ready" }
   | { result: StageRunResult; status: "blocked" };
-
-export interface StageSecurityReviewResult {
-  allowed: boolean;
-  result?: StageRunResult;
-  status: string;
-  summary: string;
-}
 
 export async function runStageSecurityReview(
   options: RunnerOptions,
@@ -94,18 +92,32 @@ export async function runStageSecurityReview(
     transientComments,
   });
   if (acceptedRisk) {
-    return acceptedRiskSecurityReview(safetyOptions, {
-      publishAudit:
-        Boolean(options.acceptedRisk) ||
-        acceptedRiskLabelPresent(context) ||
-        Boolean(runner.acceptedRisk?.run),
+    return securityReviewResultWithAttestation({
+      config,
+      context,
+      result: await acceptedRiskSecurityReview(safetyOptions, {
+        publishAudit:
+          Boolean(options.acceptedRisk) ||
+          acceptedRiskLabelPresent(context) ||
+          Boolean(runner.acceptedRisk?.run),
+      }),
     });
   }
 
   const inputSafetyResult = await blockPromptInput(safetyOptions);
-  if (inputSafetyResult) return blockedSecurityReview(inputSafetyResult);
+  if (inputSafetyResult) {
+    return securityReviewResultWithAttestation({
+      config,
+      context,
+      result: blockedSecurityReview(inputSafetyResult),
+    });
+  }
   logger.event("security.review.done", { allowed: true });
-  return { allowed: true, status: "allowed", summary: "Security review passed." };
+  return securityReviewResultWithAttestation({
+    config,
+    context,
+    result: { allowed: true, status: "allowed", summary: "Security review passed." },
+  });
 }
 
 export async function runStage(options: RunnerOptions): Promise<StageRunResult> {
@@ -218,6 +230,7 @@ async function blockInitialPromptInput(options: {
   acceptedRisk: boolean;
   safetyOptions: StageSafetyOptions;
 }): Promise<StageRunResult | undefined> {
+  if (reuseReviewInputSafetyAttestation(options.safetyOptions)) return undefined;
   if (options.acceptedRisk) return blockAcceptedRiskDeltaInput(options.safetyOptions);
   return blockPromptInput(options.safetyOptions);
 }
@@ -427,16 +440,22 @@ function buildAiRunOptions(options: {
   return {
     config: options.config,
     contextFilesRoot: options.contextFiles.root_dir,
-    cwd: options.options.cwd,
+    cwd: reviewWorkspace(options.options),
     logger: options.logger,
     maxTurns: options.options.maxTurns,
     profileName: options.options.profileName,
+    profileContextCwd: options.options.cwd,
     prompt: options.prompts.prompt,
+    sandboxMode: options.options.stage === "review-matrix" ? "read-only" : undefined,
     schema: options.schema,
     schemaId: options.definition.schemaId,
     stage: options.options.stage,
     stageDefinition: options.definition,
     system: options.prompts.system,
+    toolOverride:
+      options.options.stage === "review-matrix" && options.options.executionMode === "member"
+        ? ["Read", "Glob", "Grep"]
+        : undefined,
   };
 }
 
@@ -478,15 +497,14 @@ async function loadRunnerContext(options: {
     target: options.definition.target,
   });
   const context = withStageHandoffs(
-    withSourceComment(
-      await contextFor({ client: options.client, options: options.options }),
-      options.options,
-    ),
+    withSourceComment(await contextForStage(options.client, options.options), options.options),
     options.options.handoffDir,
   );
   options.logger.event("context.load.done", {
     artifact: `${context.artifact.type}#${context.artifact.number}`,
     handoffs: context.handoffs?.length || 0,
+    review_checkpoint: context.reviewScope?.checkpointSha || "",
+    review_target: context.reviewScope?.targetSha || "",
     timeline_items: context.timeline.length,
   });
   return context;
@@ -549,16 +567,27 @@ function buildRenderedPrompts(options: {
   options: RunnerOptions;
   schema: JsonObject;
 }): { prompt: string; system: string } {
+  const workspace = reviewWorkspace(options.options);
+  const expectedHead =
+    workspace === options.options.cwd ? undefined : options.context.reviewScope?.targetSha;
   return renderPrompts({
     context: options.context,
     contextFiles: options.contextFiles,
     cwd: options.options.cwd,
     outputSchema: options.schema,
     promptDir: options.definition.promptDir,
-    repositoryContext: repositoryContext(options.options.cwd),
+    repositoryContext: repositoryContext(workspace, expectedHead),
     roleDefinition: roleDefinitionFor(options.options),
     stageContract: stageContract(options.options.stage, options.context),
   });
+}
+
+function reviewWorkspace(options: RunnerOptions): string {
+  return options.stage === "review-matrix" &&
+    options.executionMode === "member" &&
+    options.review?.snapshotSha
+    ? join(options.cwd, ".git-vibe", "review-snapshot")
+    : options.cwd;
 }
 
 function blockPromptInput(
@@ -629,56 +658,6 @@ async function publishPreAiBlockedResult(options: {
     transientComments: options.transientComments,
   });
   return result;
-}
-
-async function contextFor({
-  client,
-  options,
-}: {
-  client: GitHubClient;
-  options: RunnerOptions;
-}): Promise<ContextPacket> {
-  const definition = stageDefinitions[options.stage];
-  if (
-    options.stage === "validate" &&
-    process.env.GITVIBE_DISCUSSION_NUMBER &&
-    !options.issueNumber
-  ) {
-    return buildDiscussionContext({
-      client,
-      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER,
-      repository: options.repository,
-      token: options.token,
-    });
-  }
-
-  if (definition.target === "discussion") {
-    const discussionNumber = process.env.GITVIBE_DISCUSSION_NUMBER || options.issueNumber;
-    return buildDiscussionContext({
-      client,
-      discussionNumber,
-      repository: options.repository,
-      token: options.token,
-    });
-  }
-
-  if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
-    return buildIssueContext({
-      client,
-      issueNumber: options.prNumber,
-      repository: options.repository,
-      token: options.token,
-      type: "pull-request",
-    });
-  }
-
-  return buildIssueContext({
-    client,
-    issueNumber: definition.target === "pull-request" ? options.prNumber : options.issueNumber,
-    repository: options.repository,
-    token: options.token,
-    type: definition.target,
-  });
 }
 
 function withSourceComment(context: ContextPacket, options: RunnerOptions): ContextPacket {

@@ -202,7 +202,10 @@ describe("AI prompt-injection safety classifier tool isolation", () => {
 
     const constructorOptions = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0];
     expect(gate).toMatchObject({ allowed: true, severity: "none" });
-    expect(constructorOptions.config).toEqual({ model_provider: "openai" });
+    expect(constructorOptions.config).toEqual({
+      features: { plugins: false },
+      model_provider: "openai",
+    });
   });
 
   it("does not pass configured MCP tools to Claude classifier runs", async () => {

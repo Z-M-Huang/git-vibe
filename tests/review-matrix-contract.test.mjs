@@ -20,6 +20,7 @@ describe("review-matrix contract", () => {
       ],
       next_state: "changes-required",
       references: ["src/app.ts"],
+      resolved_finding_ids: ["prior-review-2"],
       stage: "review-matrix",
       status: "completed",
       summary: "Review found required changes.",
@@ -61,15 +62,27 @@ describe("review-matrix contract", () => {
       }),
     ).resolves.toMatchObject({ next_state: "blocked", status: "blocked" });
 
+    await expect(
+      validateOutput({
+        content: JSON.stringify({ ...output, resolved_finding_ids: ["invalid id"] }),
+        schema,
+        schemaId: stageDefinitions["review-matrix"].schemaId,
+      }),
+    ).rejects.toThrow("AI output failed review-matrix.v1 validation");
+
     expect(schema).toMatchObject({
       properties: {
         inline_comments: {
+          description: expect.stringContaining("finding_id must be unique"),
           items: {
             properties: {
               line: { description: expect.stringContaining("final line") },
               start_line: { description: expect.stringContaining("less than or equal") },
             },
           },
+        },
+        resolved_finding_ids: {
+          description: expect.stringContaining("already closed and must not be repeated"),
         },
       },
     });

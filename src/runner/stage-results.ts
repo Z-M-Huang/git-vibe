@@ -2,6 +2,7 @@ import { writeStageResultFile, writeStageResultSummary } from "./handoffs.js";
 import type { StageLogger } from "./logging.js";
 import { renderStageResultComment } from "./result-comments.js";
 import { matrixResultMetadata } from "./role-groups.js";
+import { normalizeReviewMatrixOutput } from "./review-matrix-output.js";
 import { loadStageSchema, validateOutput } from "./schemas.js";
 import { stageDefinitions } from "../shared/stages.js";
 import type { ContextPacket, RunnerOptions, StageRunResult } from "../shared/types.js";
@@ -21,10 +22,37 @@ export async function stageRunResult({
 }): Promise<StageRunResult> {
   logger.event("output.validation.start", { schema_id: definition.schemaId });
   const schema = loadStageSchema(definition.schemaFile);
-  const parsedOutput = await validateOutput({ content, schema, schemaId: definition.schemaId });
+  const validatedOutput = await validateOutput({ content, schema, schemaId: definition.schemaId });
   logger.event("output.validation.done", {
-    status: String(parsedOutput.status),
+    status: String(validatedOutput.status),
   });
+  const normalization =
+    options.stage === "review-matrix"
+      ? normalizeReviewMatrixOutput(validatedOutput, context)
+      : {
+          carriedFindings: 0,
+          duplicateFindingIds: 0,
+          output: validatedOutput,
+          redundantResolvedFindingIds: 0,
+          rewrittenInlineComments: 0,
+        };
+  const parsedOutput = normalization.output;
+  if (normalization.rewrittenInlineComments > 0) {
+    logger.event("output.inline_comments.normalized", {
+      duplicate_finding_ids: normalization.duplicateFindingIds,
+      rewritten_inline_comments: normalization.rewrittenInlineComments,
+    });
+  }
+  if (normalization.carriedFindings > 0) {
+    logger.event("output.review_findings.carried", {
+      findings: normalization.carriedFindings,
+    });
+  }
+  if (normalization.redundantResolvedFindingIds > 0) {
+    logger.event("output.resolved_finding_ids.normalized", {
+      already_resolved_finding_ids: normalization.redundantResolvedFindingIds,
+    });
+  }
   const result: StageRunResult = {
     commentBody: renderStageResultComment({
       context,

@@ -49,7 +49,7 @@ describe("Codex and Claude SDK adapter routing", () => {
         apiKey: "test-key",
         baseUrl: "https://codex-proxy.example/v1",
         codexPathOverride: codexPath,
-        config: { model_provider: "openai" },
+        config: { features: { plugins: false }, model_provider: "openai" },
         env: expect.any(Object),
       }),
     );
@@ -81,7 +81,7 @@ describe("Codex and Claude SDK adapter routing", () => {
     await runAiStage(stageOptions({ cwd, config: codexConfig(), sandboxMode: "read-only" }));
 
     const constructorOptions = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0];
-    expect(constructorOptions.config.features?.plugins).toBeUndefined();
+    expect(constructorOptions.config.features?.plugins).toBe(false);
     expect(constructorOptions.config.model_provider).toBe("openai");
     const threadOptions = globalThis.__gitVibeSdkMocks.codexStartThread.mock.calls[0][0];
     expect(threadOptions).toMatchObject({
@@ -144,6 +144,65 @@ describe("Claude SDK adapter routing", () => {
   });
 });
 
+describe("Codex SDK adapter streaming", () => {
+  it("logs completed Codex items before the turn finishes", async () => {
+    const cwd = workspace();
+    const logger = { event: vi.fn() };
+    const output = validValidateOutput({ summary: "Streamed." });
+    let releaseTurn;
+    const turnBlocked = new Promise((resolve) => {
+      releaseTurn = resolve;
+    });
+
+    async function* events() {
+      yield {
+        item: {
+          command: "git diff --stat",
+          exit_code: 0,
+          id: "command",
+          status: "completed",
+          type: "command_execution",
+        },
+        type: "item.completed",
+      };
+      await turnBlocked;
+      yield {
+        item: {
+          id: "response",
+          text: JSON.stringify(output),
+          type: "agent_message",
+        },
+        type: "item.completed",
+      };
+      yield {
+        type: "turn.completed",
+        usage: { input_tokens: 1, output_tokens: 2 },
+      };
+    }
+
+    globalThis.__gitVibeSdkMocks.codexRun.mockResolvedValueOnce({ events: events() });
+    const stagePromise = runAiStage(stageOptions({ config: codexConfig(), cwd, logger }));
+
+    try {
+      await vi.waitFor(() => {
+        expect(logger.event).toHaveBeenCalledWith(
+          "ai.codex.command",
+          expect.objectContaining({ command: "git diff --stat", status: "completed" }),
+        );
+      });
+      expect(logger.event).not.toHaveBeenCalledWith("ai.request.done", expect.anything());
+    } finally {
+      releaseTurn();
+    }
+
+    await expect(stagePromise).resolves.toBe(JSON.stringify(output));
+    expect(logger.event).toHaveBeenCalledWith(
+      "ai.request.done",
+      expect.objectContaining({ input_tokens: 1, output_tokens: 2 }),
+    );
+  });
+});
+
 describe("Codex SDK adapter logging", () => {
   it("logs Codex SDK item variants and supports reasoning summaries without effort", async () => {
     const cwd = workspace();
@@ -196,7 +255,11 @@ describe("Codex SDK adapter logging", () => {
 
     expect(globalThis.__gitVibeSdkMocks.codexConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: { model_provider: "openai", model_reasoning_summary: "concise" },
+        config: {
+          features: { plugins: false },
+          model_provider: "openai",
+          model_reasoning_summary: "concise",
+        },
       }),
     );
     expect(globalThis.__gitVibeSdkMocks.codexStartThread).toHaveBeenCalledWith(

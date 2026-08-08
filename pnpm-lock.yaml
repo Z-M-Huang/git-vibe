@@ -8,8 +8,9 @@ overrides:
   "@hono/node-server": 2.0.10
   body-parser: 2.3.0
   diff: 9.0.0
-  fast-uri: 3.1.4
-  hono: 4.12.27
+  fast-uri: 3.1.5
+  hono: 4.12.34
+  ip-address: 10.3.1
 
 importers:
   .:
@@ -540,7 +541,7 @@ packages:
       }
     engines: { node: ">=20" }
     peerDependencies:
-      hono: 4.12.27
+      hono: 4.12.34
 
   "@humanfs/core@0.19.2":
     resolution:
@@ -1554,10 +1555,10 @@ packages:
         integrity: sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ==,
       }
 
-  fast-uri@3.1.4:
+  fast-uri@3.1.5:
     resolution:
       {
-        integrity: sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==,
+        integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==,
       }
 
   fdir@6.5.0:
@@ -1698,10 +1699,10 @@ packages:
       }
     engines: { node: ">= 0.4" }
 
-  hono@4.12.27:
+  hono@4.12.34:
     resolution:
       {
-        integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==,
+        integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==,
       }
     engines: { node: ">=16.9.0" }
 
@@ -1760,10 +1761,10 @@ packages:
         integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==,
       }
 
-  ip-address@10.2.0:
+  ip-address@10.3.1:
     resolution:
       {
-        integrity: sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA==,
+        integrity: sha512-1e9d3kb97NHJTIJDZW9rKqW2h6+dFa50Dy0fpPSMQp2ADje5gvKsXmdiK6dwY5t76TaTt5+P5N1Y/LoToIxP6g==,
       }
     engines: { node: ">= 12" }
 
@@ -2981,9 +2982,9 @@ snapshots:
       "@eslint/core": 1.2.1
       levn: 0.4.1
 
-  "@hono/node-server@2.0.10(hono@4.12.27)":
+  "@hono/node-server@2.0.10(hono@4.12.34)":
     dependencies:
-      hono: 4.12.27
+      hono: 4.12.34
 
   "@humanfs/core@0.19.2":
     dependencies:
@@ -3016,7 +3017,7 @@ snapshots:
 
   "@modelcontextprotocol/sdk@1.29.0(zod@4.4.3)":
     dependencies:
-      "@hono/node-server": 2.0.10(hono@4.12.27)
+      "@hono/node-server": 2.0.10(hono@4.12.34)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -3026,7 +3027,7 @@ snapshots:
       eventsource-parser: 3.0.8
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.12.27
+      hono: 4.12.34
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -3329,7 +3330,7 @@ snapshots:
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.4
+      fast-uri: 3.1.5
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -3575,7 +3576,7 @@ snapshots:
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
       express: 5.2.1
-      ip-address: 10.2.0
+      ip-address: 10.3.1
 
   express@5.2.1:
     dependencies:
@@ -3618,7 +3619,7 @@ snapshots:
 
   fast-sha256@1.3.0: {}
 
-  fast-uri@3.1.4: {}
+  fast-uri@3.1.5: {}
 
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
@@ -3699,7 +3700,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.12.27: {}
+  hono@4.12.34: {}
 
   html-escaper@2.0.2: {}
 
@@ -3725,7 +3726,7 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ip-address@10.2.0: {}
+  ip-address@10.3.1: {}
 
   ipaddr.js@1.9.1: {}
 

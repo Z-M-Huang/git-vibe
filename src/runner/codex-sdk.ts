@@ -6,7 +6,9 @@ import {
   Codex,
   type CodexOptions,
   type ModelReasoningEffort,
+  type Thread,
   type ThreadItem,
+  type Usage,
 } from "@openai/codex-sdk";
 import type { RunAiStageOptions } from "./ai.js";
 import { logSdkWebPolicyNotice } from "./ai-web-policy.js";
@@ -78,7 +80,7 @@ export async function runCodexSdkStage({
       approvalPolicy: "never",
       model,
       modelReasoningEffort: codexReasoningEffort(profile),
-      ...(options.isolateWorkspace
+      ...(options.isolateWorkspace || options.sandboxMode === "read-only"
         ? { networkAccessEnabled: false, webSearchMode: "disabled" as const }
         : {}),
       sandboxMode: options.isolateWorkspace
@@ -87,10 +89,7 @@ export async function runCodexSdkStage({
       skipGitRepoCheck: true,
       workingDirectory: options.isolateWorkspace ? contextDir : options.cwd,
     });
-    const result = await thread.run(codexPrompt(options), {
-      outputSchema: codexOutputSchema(options.schema),
-    });
-    for (const item of result.items) logCodexItem(item, options.logger);
+    const result = await runCodexThread(thread, options);
     const validated = await validatedSdkOutput({
       content: result.finalResponse,
       schema: options.schema,
@@ -119,9 +118,9 @@ function codexConfig(
   return {
     model_provider: "openai",
     ...mcpConfig,
-    ...(isolateWorkspace
-      ? {
-          features: {
+    features: {
+      ...(isolateWorkspace
+        ? {
             apps: false,
             browser_use: false,
             browser_use_external: false,
@@ -129,12 +128,12 @@ function codexConfig(
             image_generation: false,
             in_app_browser: false,
             multi_agent: false,
-            plugins: false,
             shell_tool: false,
             unified_exec: false,
-          },
-        }
-      : {}),
+          }
+        : {}),
+      plugins: false,
+    },
     ...(summary ? { model_reasoning_summary: summary } : {}),
   };
 }
@@ -200,6 +199,33 @@ function stringEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(
     Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+}
+
+async function runCodexThread(
+  thread: Thread,
+  options: RunAiStageOptions,
+): Promise<{ finalResponse: string; usage: Usage | null }> {
+  const { events } = await thread.runStreamed(codexPrompt(options), {
+    outputSchema: codexOutputSchema(options.schema),
+  });
+  let finalResponse = "";
+  let usage: Usage | null = null;
+
+  for await (const event of events) {
+    if (event.type === "item.completed") {
+      logCodexItem(event.item, options.logger);
+      if (event.item.type === "agent_message") finalResponse = event.item.text;
+    } else if (event.type === "turn.completed") {
+      usage = event.usage;
+    } else if (event.type === "turn.failed") {
+      throw new Error(event.error.message);
+    } else if (event.type === "error") {
+      options.logger?.event("ai.codex.error", { error: summarizeError(event.message) });
+      throw new Error(event.message);
+    }
+  }
+
+  return { finalResponse, usage };
 }
 
 function logCodexItem(item: ThreadItem, logger: RunAiStageOptions["logger"]): void {

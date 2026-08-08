@@ -3,13 +3,21 @@ import {
   gitVibeTraceabilityIssueNumbers,
   sourceDiscussionTraceFromBody,
 } from "../shared/traceability.js";
-import type { ContextPacket, JsonObject, PullRequestFile, TimelineItem } from "../shared/types.js";
+import { stageDefinitions } from "../shared/stages.js";
+import type {
+  ContextPacket,
+  JsonObject,
+  ReviewRunState,
+  RunnerOptions,
+  TimelineItem,
+} from "../shared/types.js";
 import {
   discussionContext,
-  openPullRequestReviewComments,
+  pullRequestReviewContext,
   type DiscussionNode,
   type PullRequestReviewCommentNode,
 } from "./context-graphql.js";
+import { pullRequestReviewFiles } from "./review-scope.js";
 
 interface IssueResponse extends JsonObject {
   author_association?: string;
@@ -29,6 +37,11 @@ interface CommentResponse extends IssueResponse {
 }
 
 interface PullRequestResponse extends JsonObject {
+  base?: {
+    ref?: string;
+    repo?: { full_name?: string } | null;
+    sha?: string;
+  };
   head?: {
     ref?: string;
     repo?: {
@@ -38,19 +51,6 @@ interface PullRequestResponse extends JsonObject {
     } | null;
     sha?: string;
   };
-}
-
-interface PullRequestFileResponse extends JsonObject {
-  additions?: number;
-  blob_url?: string;
-  changes?: number;
-  contents_url?: string;
-  deletions?: number;
-  filename?: string;
-  patch?: string;
-  previous_filename?: string;
-  raw_url?: string;
-  status?: string;
 }
 
 interface PullRequestReviewResponse extends JsonObject {
@@ -63,13 +63,63 @@ interface PullRequestReviewResponse extends JsonObject {
   user?: { login?: string };
 }
 
-export async function buildIssueContext(options: {
+interface BuildIssueContextOptions {
   client: GitHubClient;
   issueNumber: string;
+  review?: ReviewRunState;
   repository: string;
   token: string;
   type?: "issue" | "pull-request";
-}): Promise<ContextPacket> {
+}
+
+export async function contextForStage(
+  client: GitHubClient,
+  options: RunnerOptions,
+): Promise<ContextPacket> {
+  const definition = stageDefinitions[options.stage];
+  if (
+    options.stage === "validate" &&
+    process.env.GITVIBE_DISCUSSION_NUMBER &&
+    !options.issueNumber
+  ) {
+    return buildDiscussionContext({
+      client,
+      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER,
+      repository: options.repository,
+      token: options.token,
+    });
+  }
+  if (definition.target === "discussion") {
+    return buildDiscussionContext({
+      client,
+      discussionNumber: process.env.GITVIBE_DISCUSSION_NUMBER || options.issueNumber,
+      repository: options.repository,
+      token: options.token,
+    });
+  }
+  if (options.stage === "review-matrix" && options.review && !options.prNumber) {
+    throw new Error("review-matrix requires a pull request target.");
+  }
+  if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
+    return buildIssueContext({
+      client,
+      issueNumber: options.prNumber,
+      review: options.stage === "review-matrix" ? options.review : undefined,
+      repository: options.repository,
+      token: options.token,
+      type: "pull-request",
+    });
+  }
+  return buildIssueContext({
+    client,
+    issueNumber: definition.target === "pull-request" ? options.prNumber : options.issueNumber,
+    repository: options.repository,
+    token: options.token,
+    type: definition.target,
+  });
+}
+
+export async function buildIssueContext(options: BuildIssueContextOptions): Promise<ContextPacket> {
   const { owner, repo } = splitRepository(options.repository);
   const issue = await options.client.request<IssueResponse>({
     method: "GET",
@@ -91,16 +141,16 @@ export async function buildIssueContext(options: {
           token: options.token,
         })
       : undefined;
-  const reviewComments =
+  const reviewContext =
     options.type === "pull-request"
-      ? await openPullRequestReviewComments({
+      ? await pullRequestReviewContext({
           client: options.client,
           name: repo,
           owner,
           pullNumber: options.issueNumber,
           token: options.token,
         })
-      : [];
+      : { comments: [], resolvedFindingIds: [] };
   const reviews =
     options.type === "pull-request"
       ? await pullRequestReviews({
@@ -123,23 +173,27 @@ export async function buildIssueContext(options: {
           token: options.token,
         })
       : [];
-  const pullRequestFiles =
-    options.type === "pull-request"
-      ? await pullRequestFilesFor({
+  const pullRequestReview =
+    options.type === "pull-request" && pullRequest
+      ? await pullRequestReviewFiles({
           client: options.client,
-          issueNumber: options.issueNumber,
           name: repo,
           owner,
+          pullNumber: options.issueNumber,
+          pullRequest,
+          review: options.review,
+          reviews,
           token: options.token,
         })
-      : [];
-  const timeline = [
-    toTimelineItem("body", `issue-${options.issueNumber}`, issue),
-    ...comments.map((comment) => toTimelineItem("comment", String(comment.id || ""), comment)),
-    ...reviews.map(toPullRequestReviewBodyTimelineItem),
-    ...reviewComments.map(toPullRequestReviewTimelineItem),
-    ...relatedTimeline,
-  ].sort(compareTimelineItems);
+      : { files: [] };
+  const timeline = pullRequestTimeline({
+    comments,
+    issue,
+    issueNumber: options.issueNumber,
+    relatedTimeline,
+    reviewComments: reviewContext.comments,
+    reviews: reviewBodiesForContext(reviews, pullRequestReview.scope),
+  });
 
   return {
     artifact: {
@@ -154,10 +208,51 @@ export async function buildIssueContext(options: {
       pullRequestHead: pullRequestHead(pullRequest),
     },
     generatedAt: new Date().toISOString(),
-    pullRequestFiles: pullRequestFiles.length ? pullRequestFiles : undefined,
+    pullRequestFiles: pullRequestReview.files.length ? pullRequestReview.files : undefined,
     repository: options.repository,
+    resolvedReviewFindingIds:
+      options.type === "pull-request" ? reviewContext.resolvedFindingIds : undefined,
+    reviewScope: pullRequestReview.scope,
     timeline,
   };
+}
+
+function pullRequestTimeline(options: {
+  comments: CommentResponse[];
+  issue: IssueResponse;
+  issueNumber: string;
+  relatedTimeline: TimelineItem[];
+  reviewComments: PullRequestReviewCommentNode[];
+  reviews: PullRequestReviewResponse[];
+}): TimelineItem[] {
+  return [
+    toTimelineItem("body", `issue-${options.issueNumber}`, options.issue),
+    ...options.comments.map((comment) =>
+      toTimelineItem("comment", String(comment.id || ""), comment),
+    ),
+    ...options.reviews.map(toPullRequestReviewBodyTimelineItem),
+    ...options.reviewComments.map(toPullRequestReviewTimelineItem),
+    ...options.relatedTimeline,
+  ].sort(compareTimelineItems);
+}
+
+function reviewBodiesForContext(
+  reviews: PullRequestReviewResponse[],
+  scope: ContextPacket["reviewScope"],
+): PullRequestReviewResponse[] {
+  const cutoff = scope?.checkpointSubmittedAt;
+  if (!cutoff) return reviews;
+  return reviews.filter((review) => {
+    if (!gitVibeReviewAuthor(review.user?.login)) return true;
+    return !review.submitted_at || review.submitted_at >= cutoff;
+  });
+}
+
+function gitVibeReviewAuthor(value: string | undefined): boolean {
+  const login = String(value || "")
+    .trim()
+    .toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
 
 function labelNames(labels: IssueResponse["labels"]): string[] {
@@ -180,21 +275,6 @@ async function pullRequestDetails(options: {
   });
 }
 
-async function pullRequestFilesFor(options: {
-  client: GitHubClient;
-  issueNumber: string;
-  name: string;
-  owner: string;
-  token: string;
-}): Promise<PullRequestFile[]> {
-  const files = await paginatedGitHubRequest<PullRequestFileResponse>(options.client, {
-    method: "GET",
-    path: `/repos/${options.owner}/${options.name}/pulls/${options.issueNumber}/files`,
-    token: options.token,
-  });
-  return files.map(toPullRequestFile).filter((file): file is PullRequestFile => Boolean(file));
-}
-
 function pullRequestHead(
   pullRequest: PullRequestResponse | undefined,
 ): ContextPacket["artifact"]["pullRequestHead"] {
@@ -206,23 +286,6 @@ function pullRequestHead(
       : "");
   if (!branch || !repository) return undefined;
   return { branch, repository, sha: pullRequest?.head?.sha };
-}
-
-function toPullRequestFile(file: PullRequestFileResponse): PullRequestFile | undefined {
-  const filename = stringField(file.filename);
-  if (!filename) return undefined;
-  return {
-    additions: numberField(file.additions),
-    blobUrl: stringField(file.blob_url),
-    changes: numberField(file.changes),
-    contentsUrl: stringField(file.contents_url),
-    deletions: numberField(file.deletions),
-    filename,
-    patch: stringField(file.patch),
-    previousFilename: stringField(file.previous_filename),
-    rawUrl: stringField(file.raw_url),
-    status: stringField(file.status) || "modified",
-  };
 }
 
 async function pullRequestRelatedTimeline(options: {
@@ -440,9 +503,13 @@ function toPullRequestReviewTimelineItem(item: PullRequestReviewCommentNode): Ti
     }),
     authorAssociation: item.authorAssociation,
     databaseId: item.databaseId,
+    line: item.line || item.originalLine || undefined,
     parentId: item.replyTo?.id ? String(item.replyTo.id) : undefined,
+    path: item.path,
     reviewThreadId: item.reviewThreadId,
     reviewThreadIsOutdated: item.reviewThreadIsOutdated,
+    side: item.diffSide || undefined,
+    startLine: item.startLine || item.originalStartLine || undefined,
   };
 }
 
@@ -481,14 +548,6 @@ function discussionNodeToTimelineItem(
 
 function compareTimelineItems(left: TimelineItem, right: TimelineItem): number {
   return left.createdAt.localeCompare(right.createdAt);
-}
-
-function stringField(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function numberField(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 interface RelatedIssueNode {

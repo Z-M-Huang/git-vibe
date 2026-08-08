@@ -117,6 +117,35 @@ describe("GitVibe security review hosted auth", () => {
   });
 });
 
+describe("GitVibe blocked security review outputs", () => {
+  it("does not expose an input attestation for blocked results", async () => {
+    const appendFile = vi.fn();
+    const runStageSecurityReview = vi.fn().mockResolvedValue({
+      allowed: false,
+      inputSafetyDigest: "d".repeat(64),
+      status: "blocked",
+      summary: "Blocked.",
+    });
+
+    await expect(
+      securityReview({
+        appendFile,
+        argv: ["review-matrix"],
+        env: {
+          ...baseEnv,
+          GITHUB_OUTPUT: "/tmp/output",
+          GITVIBE_PR_NUMBER: "12",
+        },
+        runStageSecurityReview,
+      }),
+    ).resolves.toBe(0);
+
+    expect(appendFile.mock.calls.map((call) => call[1]).join("\n")).not.toContain(
+      "input-safety-digest",
+    );
+  });
+});
+
 describe("GitVibe security review action outputs", () => {
   it("writes allowed outputs without a result file", async () => {
     const appendFile = vi.fn();
@@ -164,6 +193,49 @@ describe("GitVibe security review action outputs", () => {
     ).resolves.toBe(0);
 
     expect(appendFile).not.toHaveBeenCalled();
+  });
+
+  it("writes the internally derived review snapshot without action inputs", async () => {
+    const appendFile = vi.fn();
+    const baseSha = "a".repeat(40);
+    const targetSha = "b".repeat(40);
+    const snapshotSha = "c".repeat(64);
+    const runStageSecurityReview = vi.fn().mockResolvedValue({
+      allowed: true,
+      inputSafetyDigest: "d".repeat(64),
+      reviewScope: {
+        baseSha,
+        headRepository: "contributor/repo",
+        snapshotSha,
+        targetSha,
+      },
+      status: "allowed",
+      summary: "Security review passed.",
+    });
+
+    await expect(
+      securityReview({
+        appendFile,
+        argv: ["review-matrix"],
+        env: {
+          ...baseEnv,
+          GITHUB_OUTPUT: "/tmp/output",
+          GITVIBE_PR_NUMBER: "12",
+          GITVIBE_REVIEW_EVENT_TARGET_SHA: targetSha,
+        },
+        runStageSecurityReview,
+      }),
+    ).resolves.toBe(0);
+
+    expect(runStageSecurityReview).toHaveBeenCalledWith(
+      expect.objectContaining({ review: { targetSha } }),
+    );
+    expect(appendFile.mock.calls.map((call) => call[1]).join("\n")).toContain(
+      `checkpoint-sha<<GITVIBE_OUTPUT\n\nGITVIBE_OUTPUT`,
+    );
+    expect(appendFile.mock.calls.map((call) => call[1]).join("\n")).toContain(
+      `target-sha<<GITVIBE_OUTPUT\n${targetSha}\nGITVIBE_OUTPUT`,
+    );
   });
 });
 

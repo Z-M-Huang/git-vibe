@@ -98,8 +98,8 @@ describe("GitVibe prebuilt action runtime", () => {
 
         expect(nodeIndex, `${file} ${jobName} installs Node`).toBeGreaterThan(-1);
         expect(pnpmIndex, `${file} ${jobName} should not install pnpm`).toBe(-1);
-        expect(setupSteps[nodeIndex], `${file} ${jobName} installs Node 22`).toMatchObject({
-          with: { "node-version": 22, "package-manager-cache": false },
+        expect(setupSteps[nodeIndex], `${file} ${jobName} installs Node 24`).toMatchObject({
+          with: { "node-version": 24, "package-manager-cache": false },
         });
       }
     }

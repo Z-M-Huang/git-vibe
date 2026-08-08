@@ -7,7 +7,10 @@ const codexConstructor = vi.fn(function Codex() {
   };
 });
 const codexStartThread = vi.fn((options = {}) => ({
-  run: (input, turnOptions = {}) => codexRun(input, turnOptions, options),
+  runStreamed: async (input, turnOptions = {}) => {
+    const result = await codexRun(input, turnOptions, options);
+    return result?.events ? result : { events: codexEvents(result) };
+  },
 }));
 const codexRun = vi.fn(async (_input, turnOptions = {}) => {
   if (codexResultQueues.length > 0) return codexResultQueues.shift();
@@ -92,6 +95,25 @@ async function* claudeMessages(params) {
     usage: {},
     uuid: "result",
   };
+}
+
+async function* codexEvents(result) {
+  yield { thread_id: "thread", type: "thread.started" };
+  yield { type: "turn.started" };
+  let finalResponseSeen = false;
+  for (const item of result.items || []) {
+    if (item.type === "agent_message" && item.text === result.finalResponse) {
+      finalResponseSeen = true;
+    }
+    yield { item, type: "item.completed" };
+  }
+  if (!finalResponseSeen) {
+    yield {
+      item: { id: "final-response", text: result.finalResponse, type: "agent_message" },
+      type: "item.completed",
+    };
+  }
+  if (result.usage) yield { type: "turn.completed", usage: result.usage };
 }
 
 function queueOutput(adapter, output) {

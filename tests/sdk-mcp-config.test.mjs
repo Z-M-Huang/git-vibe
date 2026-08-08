@@ -41,7 +41,7 @@ describe("SDK MCP config", () => {
     await runAiStage(stageOptions({ cwd, config: codexConfigWithMcp() }));
 
     const constructorOptions = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0];
-    expect(constructorOptions.config.features?.plugins).toBeUndefined();
+    expect(constructorOptions.config.features?.plugins).toBe(false);
     expect(constructorOptions.config.model_provider).toBe("openai");
     expect(constructorOptions.config.mcp_servers.dense_mem).toMatchObject({
       args: [join(cwd, "dist/actions/mcp-gateway.js")],
@@ -105,6 +105,18 @@ describe("SDK MCP config", () => {
     });
     expect(existsSync(gatewayPath)).toBe(false);
   });
+
+  it("disables MCP when the caller supplies an explicit tool set", async () => {
+    const cwd = workspace();
+    process.env.GITVIBE_MCP_ENV_JSON = JSON.stringify({ DENSE_TOKEN: "secret-token" });
+
+    await runAiStage(
+      stageOptions({ config: codexConfigWithMcp(), cwd, toolOverride: ["Read", "Glob", "Grep"] }),
+    );
+
+    const config = globalThis.__gitVibeSdkMocks.codexConstructor.mock.calls[0][0].config;
+    expect(config.mcp_servers).toBeUndefined();
+  });
 });
 
 describe("SDK MCP config warnings", () => {
@@ -114,7 +126,9 @@ describe("SDK MCP config warnings", () => {
     await runAiStage(stageOptions({ config: optionalBrokenMcpConfig(), cwd, logger }));
 
     expect(globalThis.__gitVibeSdkMocks.codexConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({ config: { model_provider: "openai" } }),
+      expect.objectContaining({
+        config: { features: { plugins: false }, model_provider: "openai" },
+      }),
     );
     expect(logger.event).toHaveBeenCalledWith("mcp.sdk_config.warning", {
       reason: "ai.mcp.servers.dense_mem.command must be configured for stdio MCP servers.",
@@ -123,7 +137,7 @@ describe("SDK MCP config warnings", () => {
   });
 });
 
-function stageOptions({ config, cwd, logger }) {
+function stageOptions({ config, cwd, logger, toolOverride }) {
   return {
     config,
     cwd,
@@ -135,6 +149,7 @@ function stageOptions({ config, cwd, logger }) {
     stage: "validate",
     stageDefinition: { schemaFile: "validate.v1.schema.json", schemaId: "validate.v1" },
     system: "System",
+    toolOverride,
   };
 }
 

@@ -375,7 +375,7 @@ describe("GitVibe AI smoke workflow", () => {
     );
 
     expect(claudeSetupNode).toMatchObject({
-      with: { "node-version": 22, "package-manager-cache": false },
+      with: { "node-version": 24, "package-manager-cache": false },
     });
     expect(claudeInstall).toBe(true);
     expect(claudePrepare).toContain("bash scripts/prepare-claude-code.sh");
