@@ -33,6 +33,7 @@ export async function stageRunResult({
           carriedFindings: 0,
           duplicateFindingIds: 0,
           output: validatedOutput,
+          redundantResolvedFindingIds: 0,
           rewrittenInlineComments: 0,
         };
   const parsedOutput = normalization.output;
@@ -45,6 +46,11 @@ export async function stageRunResult({
   if (normalization.carriedFindings > 0) {
     logger.event("output.review_findings.carried", {
       findings: normalization.carriedFindings,
+    });
+  }
+  if (normalization.redundantResolvedFindingIds > 0) {
+    logger.event("output.resolved_finding_ids.normalized", {
+      already_resolved_finding_ids: normalization.redundantResolvedFindingIds,
     });
   }
   const result: StageRunResult = {

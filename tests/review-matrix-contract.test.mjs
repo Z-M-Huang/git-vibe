@@ -81,6 +81,9 @@ describe("review-matrix contract", () => {
             },
           },
         },
+        resolved_finding_ids: {
+          description: expect.stringContaining("already closed and must not be repeated"),
+        },
       },
     });
   });

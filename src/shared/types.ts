@@ -153,6 +153,7 @@ export interface ContextPacket {
   generatedAt: string;
   handoffs?: StageHandoff[];
   pullRequestFiles?: PullRequestFile[];
+  resolvedReviewFindingIds?: string[];
   reviewScope?: ReviewScope;
   repository: string;
   source?: {

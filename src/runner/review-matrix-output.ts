@@ -32,6 +32,7 @@ export interface ReviewMatrixOutputNormalization {
   carriedFindings: number;
   duplicateFindingIds: number;
   output: JsonObject;
+  redundantResolvedFindingIds: number;
   rewrittenInlineComments: number;
 }
 
@@ -78,6 +79,7 @@ function normalizeDuplicateFindingIds(output: JsonObject): ReviewMatrixOutputNor
     carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
+    redundantResolvedFindingIds: 0,
     rewrittenInlineComments,
   };
 }
@@ -90,21 +92,41 @@ function carryIncrementalFindings(
   if (stringValue(normalization.output.status) !== "completed") return normalization;
   const prior = priorFindingItems(context);
   const current = currentFindingIds(normalization.output);
-  const resolved = new Set(stringItems(normalization.output.resolved_finding_ids));
-  for (const id of resolved) {
-    if (!prior.has(id)) throw new Error(`resolved_finding_ids contains unknown finding: ${id}.`);
+  const alreadyResolved = new Set(context.resolvedReviewFindingIds || []);
+  const resolved = new Set<string>();
+  let redundantResolvedFindingIds = 0;
+  for (const id of new Set(stringItems(normalization.output.resolved_finding_ids))) {
     if (current.has(id)) throw new Error(`Finding ${id} cannot be current and resolved.`);
+    if (prior.has(id)) {
+      resolved.add(id);
+      continue;
+    }
+    if (alreadyResolved.has(id)) {
+      redundantResolvedFindingIds += 1;
+      continue;
+    }
+    throw new Error(`resolved_finding_ids contains unknown finding: ${id}.`);
   }
+  const resolvedNormalization = redundantResolvedFindingIds
+    ? {
+        ...normalization,
+        output: { ...normalization.output, resolved_finding_ids: [...resolved] },
+        redundantResolvedFindingIds,
+      }
+    : normalization;
   const carried = [...prior.values()].filter(
     (finding) => !current.has(finding.id) && !resolved.has(finding.id),
   );
-  if (!carried.length) return normalization;
+  if (!carried.length) return resolvedNormalization;
   return {
-    ...normalization,
+    ...resolvedNormalization,
     carriedFindings: carried.length,
     output: {
-      ...normalization.output,
-      findings: [...stringItems(normalization.output.findings), ...carried.map(carriedFindingText)],
+      ...resolvedNormalization.output,
+      findings: [
+        ...stringItems(resolvedNormalization.output.findings),
+        ...carried.map(carriedFindingText),
+      ],
       next_state: "changes-required",
     },
   };
@@ -284,7 +306,13 @@ function compareStrings(left: string, right: string): number {
 }
 
 function unchangedOutput(output: JsonObject): ReviewMatrixOutputNormalization {
-  return { carriedFindings: 0, duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
+  return {
+    carriedFindings: 0,
+    duplicateFindingIds: 0,
+    output,
+    redundantResolvedFindingIds: 0,
+    rewrittenInlineComments: 0,
+  };
 }
 
 function recordValue(value: unknown): JsonObject | undefined {

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { discussionContext, openPullRequestReviewComments } from "../src/runner/context-graphql.ts";
+import { discussionContext, pullRequestReviewContext } from "../src/runner/context-graphql.ts";
 import { GitHubClient, paginatedGitHubRequest } from "../src/shared/github.ts";
 
 const originalFetch = globalThis.fetch;
@@ -40,95 +40,122 @@ describe("GitHub pagination helpers", () => {
 });
 
 describe("pull request review thread pagination", () => {
-  it("paginates unresolved pull request review threads and comments", async () => {
-    const client = mockGitHubClient({
-      graphql: vi
-        .fn()
-        .mockResolvedValueOnce({
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                nodes: [
-                  {
-                    comments: {
-                      nodes: [{ body: "First", databaseId: 1, id: "comment-1" }],
-                      pageInfo: { hasNextPage: true, endCursor: "comment-cursor" },
-                    },
-                    id: "thread-1",
-                    isOutdated: true,
-                    isResolved: false,
-                    path: "src/a.ts",
-                  },
-                ],
-                pageInfo: { hasNextPage: true, endCursor: "thread-cursor" },
-              },
-            },
-          },
-        })
-        .mockResolvedValueOnce({
-          node: {
-            comments: {
-              nodes: [{ body: "Second", databaseId: 2, id: "comment-2", path: "src/b.ts" }],
-              pageInfo: { hasNextPage: false, endCursor: null },
-            },
-          },
-        })
-        .mockResolvedValueOnce({
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                nodes: [
-                  {
-                    comments: { nodes: [{ body: "Third", databaseId: 3, id: "comment-3" }] },
-                    id: "thread-2",
-                    isOutdated: false,
-                    isResolved: false,
-                    path: "src/c.ts",
-                  },
-                ],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            },
-          },
-        }),
-    });
+  it("paginates review threads while separating resolved GitVibe finding IDs", async () => {
+    const client = mockGitHubClient({ graphql: reviewThreadGraphql() });
 
     await expect(
-      openPullRequestReviewComments({
+      pullRequestReviewContext({
         client,
         name: "repo",
         owner: "example",
         pullNumber: "4",
         token: "token",
       }),
-    ).resolves.toMatchObject([
-      {
-        body: "First",
-        databaseId: 1,
-        id: "comment-1",
-        path: "src/a.ts",
-        reviewThreadId: "thread-1",
-        reviewThreadIsOutdated: true,
-      },
-      {
-        body: "Second",
-        databaseId: 2,
-        id: "comment-2",
-        path: "src/b.ts",
-        reviewThreadId: "thread-1",
-        reviewThreadIsOutdated: true,
-      },
-      {
-        body: "Third",
-        databaseId: 3,
-        id: "comment-3",
-        path: "src/c.ts",
-        reviewThreadId: "thread-2",
-        reviewThreadIsOutdated: false,
-      },
-    ]);
+    ).resolves.toMatchObject({
+      comments: [
+        {
+          body: "First",
+          databaseId: 1,
+          id: "comment-1",
+          path: "src/a.ts",
+          reviewThreadId: "thread-1",
+          reviewThreadIsOutdated: true,
+        },
+        {
+          body: "Second",
+          databaseId: 2,
+          id: "comment-2",
+          path: "src/b.ts",
+          reviewThreadId: "thread-1",
+          reviewThreadIsOutdated: true,
+        },
+        {
+          body: "Third",
+          databaseId: 3,
+          id: "comment-3",
+          path: "src/c.ts",
+          reviewThreadId: "thread-2",
+          reviewThreadIsOutdated: false,
+        },
+      ],
+      resolvedFindingIds: ["resolved-review"],
+    });
   });
 });
+
+function reviewThreadGraphql() {
+  return vi
+    .fn()
+    .mockResolvedValueOnce({
+      repository: {
+        pullRequest: {
+          reviewThreads: {
+            nodes: [
+              {
+                comments: {
+                  nodes: [{ body: "First", databaseId: 1, id: "comment-1" }],
+                  pageInfo: { hasNextPage: true, endCursor: "comment-cursor" },
+                },
+                id: "thread-1",
+                isOutdated: true,
+                isResolved: false,
+                path: "src/a.ts",
+              },
+            ],
+            pageInfo: { hasNextPage: true, endCursor: "thread-cursor" },
+          },
+        },
+      },
+    })
+    .mockResolvedValueOnce({
+      node: {
+        comments: {
+          nodes: [{ body: "Second", databaseId: 2, id: "comment-2", path: "src/b.ts" }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    })
+    .mockResolvedValueOnce({
+      repository: {
+        pullRequest: {
+          reviewThreads: {
+            nodes: [
+              {
+                comments: { nodes: [{ body: "Third", databaseId: 3, id: "comment-3" }] },
+                id: "thread-2",
+                isOutdated: false,
+                isResolved: false,
+                path: "src/c.ts",
+              },
+              {
+                comments: {
+                  nodes: [
+                    {
+                      author: { login: "gitvibe-for-github[bot]" },
+                      body: "<!-- git-vibe:review-finding id=resolved-review -->\nFixed.",
+                      databaseId: 4,
+                      id: "comment-4",
+                    },
+                    {
+                      author: { login: "reviewer" },
+                      body: "<!-- git-vibe:review-finding id=spoofed-review -->",
+                      databaseId: 5,
+                      id: "comment-5",
+                    },
+                  ],
+                },
+                id: "thread-3",
+                isOutdated: false,
+                isResolved: true,
+                path: "src/d.ts",
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      },
+    });
+}
 
 describe("discussion context pagination", () => {
   it("paginates discussion labels, comments, and replies for runner context", async () => {

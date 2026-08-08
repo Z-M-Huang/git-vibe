@@ -207,6 +207,8 @@ describe("stage prompt standards guidance", () => {
     expect(prompts.prompt).toContain("finding_id");
     expect(prompts.prompt).toContain("unique `finding_id`");
     expect(prompts.prompt).toContain("`start_line` is the first line");
+    expect(prompts.prompt).toContain("github_context.resolvedReviewFindingIds");
+    expect(prompts.prompt).toContain("already considers closed");
     expect(properties.inline_comments).toMatchObject({ type: "array" });
     expect(prompts.prompt).not.toContain("before PR creation");
   });

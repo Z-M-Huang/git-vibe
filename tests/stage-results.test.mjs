@@ -78,6 +78,24 @@ describe("stageRunResult", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  it("persists review results that repeat an already resolved finding ID", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "git-vibe-stage-result-"));
+    process.env.RUNNER_TEMP = directory;
+    const logger = { event: vi.fn() };
+
+    try {
+      const result = await runAlreadyResolvedReviewStageResult(directory, logger);
+
+      expect(result.parsedOutput.resolved_finding_ids).toEqual([]);
+      expect(existsSync(result.resultFile)).toBe(true);
+      expect(logger.event).toHaveBeenCalledWith("output.resolved_finding_ids.normalized", {
+        already_resolved_finding_ids: 1,
+      });
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });
 
 function runValidateStageResult(cwd) {
@@ -142,6 +160,56 @@ function runReviewStageResult(cwd, inlineComments, logger) {
       },
       generatedAt: "2026-01-01T00:00:00Z",
       repository: "example/repo",
+      timeline: [],
+    },
+    definition: stageDefinitions["review-matrix"],
+    logger,
+    options: {
+      cwd,
+      dryRun: false,
+      maxTurns: 2,
+      prNumber: "12",
+      repository: "example/repo",
+      stage: "review-matrix",
+      stageTimeoutMinutes: 1,
+      token: "token",
+    },
+  });
+}
+
+function runAlreadyResolvedReviewStageResult(cwd, logger) {
+  return stageRunResult({
+    content: JSON.stringify({
+      assumptions: [],
+      comment_body: "No required fixes.",
+      findings: [],
+      inline_comments: [],
+      next_state: "review-passed",
+      references: [],
+      resolved_finding_ids: ["resolved-review"],
+      stage: "review-matrix",
+      status: "completed",
+      summary: "Review passed.",
+      tests: [],
+    }),
+    context: {
+      artifact: {
+        body: "Body",
+        number: "12",
+        title: "Pull request",
+        type: "pull-request",
+        url: "https://github.com/example/repo/pull/12",
+      },
+      generatedAt: "2026-01-01T00:00:00Z",
+      repository: "example/repo",
+      resolvedReviewFindingIds: ["resolved-review"],
+      reviewScope: {
+        baseSha: "a".repeat(40),
+        checkpointSha: "b".repeat(40),
+        headRepository: "example/repo",
+        snapshotSha: "c".repeat(64),
+        targetSha: "d".repeat(40),
+      },
       timeline: [],
     },
     definition: stageDefinitions["review-matrix"],

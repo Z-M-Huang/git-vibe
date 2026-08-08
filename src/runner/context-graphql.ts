@@ -1,4 +1,5 @@
 import type { GitHubClient } from "../shared/github.js";
+import { reviewFindingMarkerId } from "./review-finding-ids.js";
 
 export interface DiscussionNode {
   author?: { login?: string };
@@ -74,6 +75,11 @@ interface PullRequestReviewThreadResult {
   } | null;
 }
 
+export interface PullRequestReviewContext {
+  comments: PullRequestReviewCommentNode[];
+  resolvedFindingIds: string[];
+}
+
 export async function discussionContext(options: {
   client: GitHubClient;
   discussionNumber: string;
@@ -106,13 +112,13 @@ export async function discussionContext(options: {
   return { comments, discussion, labels };
 }
 
-export async function openPullRequestReviewComments(options: {
+export async function pullRequestReviewContext(options: {
   client: GitHubClient;
   name: string;
   owner: string;
   pullNumber: string;
   token: string;
-}): Promise<PullRequestReviewCommentNode[]> {
+}): Promise<PullRequestReviewContext> {
   const data = await options.client.graphql<PullRequestReviewThreadsQueryResult>(
     pullRequestReviewThreadsQuery,
     {
@@ -131,16 +137,38 @@ export async function openPullRequestReviewComments(options: {
     pullNumber: options.pullNumber,
     token: options.token,
   });
-  return threads
-    .filter((thread) => !thread.isResolved)
-    .flatMap((thread) =>
-      thread.comments.nodes.map((comment) => ({
-        ...comment,
-        path: comment.path || thread.path,
-        reviewThreadId: thread.id,
-        reviewThreadIsOutdated: thread.isOutdated,
-      })),
-    );
+  return {
+    comments: threads.filter((thread) => !thread.isResolved).flatMap(reviewThreadComments),
+    resolvedFindingIds: resolvedReviewFindingIds(threads),
+  };
+}
+
+function reviewThreadComments(thread: PullRequestReviewThreadNode): PullRequestReviewCommentNode[] {
+  return thread.comments.nodes.map((comment) => ({
+    ...comment,
+    path: comment.path || thread.path,
+    reviewThreadId: thread.id,
+    reviewThreadIsOutdated: thread.isOutdated,
+  }));
+}
+
+function resolvedReviewFindingIds(threads: PullRequestReviewThreadNode[]): string[] {
+  const ids = threads.flatMap((thread) => {
+    if (!thread.isResolved) return [];
+    return thread.comments.nodes.flatMap((comment) => {
+      if (comment.replyTo?.id || !gitVibeReviewAuthor(comment.author?.login)) return [];
+      const id = reviewFindingMarkerId(comment.body || "");
+      return id ? [id] : [];
+    });
+  });
+  return [...new Set(ids)].sort();
+}
+
+function gitVibeReviewAuthor(value: string | undefined): boolean {
+  const login = String(value || "")
+    .trim()
+    .toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
 
 async function discussionCommentsPage(options: {

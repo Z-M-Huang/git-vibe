@@ -55,6 +55,7 @@ describe("GitHub context builders", () => {
       parentId: "8",
       reviewThreadId: "thread-9",
     });
+    expect(context.resolvedReviewFindingIds).toEqual(["resolved-review"]);
     expect(context.artifact.updatedAt).toBe("2026-01-06T00:00:00Z");
     expect(context.timeline[0].updatedAt).toBeUndefined();
     expect(context.timeline[1].updatedAt).toBe("2026-01-03T01:00:00Z");
@@ -367,7 +368,8 @@ function reviewThreadFixture() {
 
 function resolvedReviewThreadFixture() {
   return filteredReviewThreadFixture({
-    body: "Resolved feedback",
+    author: "gitvibe-for-github",
+    body: "<!-- git-vibe:review-finding id=resolved-review -->\nResolved feedback",
     createdAt: "2026-01-06T00:00:00Z",
     id: "10",
     isResolved: true,
@@ -387,6 +389,7 @@ function outdatedReviewThreadFixture() {
 
 /**
  * @param {{
+ *   author?: string;
  *   body: string;
  *   createdAt: string;
  *   id: string;
@@ -400,7 +403,7 @@ function filteredReviewThreadFixture(options) {
     comments: {
       nodes: [
         {
-          author: { login: "reviewer" },
+          author: { login: options.author || "reviewer" },
           body: options.body,
           createdAt: options.createdAt,
           databaseId: Number(options.id),
@@ -686,7 +689,6 @@ function response(status, value, ok = status >= 200 && status < 300) {
     text: async () => (typeof value === "string" ? value : JSON.stringify(value)),
   };
 }
-
 function mockGitHubClient(overrides = {}) {
   return /** @type {MockGitHubClient} */ ({
     apiBaseUrl: "https://api.github.test",

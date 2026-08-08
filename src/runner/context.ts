@@ -13,7 +13,7 @@ import type {
 } from "../shared/types.js";
 import {
   discussionContext,
-  openPullRequestReviewComments,
+  pullRequestReviewContext,
   type DiscussionNode,
   type PullRequestReviewCommentNode,
 } from "./context-graphql.js";
@@ -138,16 +138,16 @@ export async function buildIssueContext(options: BuildIssueContextOptions): Prom
           token: options.token,
         })
       : undefined;
-  const reviewComments =
+  const reviewContext =
     options.type === "pull-request"
-      ? await openPullRequestReviewComments({
+      ? await pullRequestReviewContext({
           client: options.client,
           name: repo,
           owner,
           pullNumber: options.issueNumber,
           token: options.token,
         })
-      : [];
+      : { comments: [], resolvedFindingIds: [] };
   const reviews =
     options.type === "pull-request"
       ? await pullRequestReviews({
@@ -188,7 +188,7 @@ export async function buildIssueContext(options: BuildIssueContextOptions): Prom
     issue,
     issueNumber: options.issueNumber,
     relatedTimeline,
-    reviewComments,
+    reviewComments: reviewContext.comments,
     reviews: reviewBodiesForContext(reviews, pullRequestReview.scope),
   });
 
@@ -207,6 +207,8 @@ export async function buildIssueContext(options: BuildIssueContextOptions): Prom
     generatedAt: new Date().toISOString(),
     pullRequestFiles: pullRequestReview.files.length ? pullRequestReview.files : undefined,
     repository: options.repository,
+    resolvedReviewFindingIds:
+      options.type === "pull-request" ? reviewContext.resolvedFindingIds : undefined,
     reviewScope: pullRequestReview.scope,
     timeline,
   };

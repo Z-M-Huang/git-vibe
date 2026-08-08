@@ -98,10 +98,13 @@ describe("context content units", () => {
 
 describe("file-backed context prompt packing", () => {
   it("packs file-backed context references without inline content", () => {
-    const context = contextPacket({
-      body: "A".repeat(220),
-      patch: `@@ -0,0 +1 @@\n+${"B".repeat(220)}`,
-    });
+    const context = {
+      ...contextPacket({
+        body: "A".repeat(220),
+        patch: `@@ -0,0 +1 @@\n+${"B".repeat(220)}`,
+      }),
+      resolvedReviewFindingIds: ["resolved-review"],
+    };
     const rootDir = mkdtempSync(join(tmpdir(), "git-vibe-context-files-"));
     try {
       const fileContext = writePromptContextFiles({ context, rootDir, stage: "review-matrix" });
@@ -113,6 +116,7 @@ describe("file-backed context prompt packing", () => {
       expect(fileContext.units.some((unit) => unit.id === "artifact-body")).toBe(true);
       expect(packed.context_files.index.path).toBe(fileContext.index.path);
       expect(packed.context_files.manifest.path).toBe(fileContext.manifest.path);
+      expect(packed.resolvedReviewFindingIds).toEqual(["resolved-review"]);
       expect(packed.context_manifest).toMatchObject({
         delivery: "file-backed",
         handoffs: 0,

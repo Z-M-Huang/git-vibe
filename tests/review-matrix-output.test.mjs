@@ -118,6 +118,23 @@ describe("incremental review unanchored finding obligations", () => {
 });
 
 describe("incremental review finding ID validation", () => {
+  it("drops finding IDs that GitHub already considers resolved", () => {
+    const reviewContext = {
+      ...context(),
+      resolvedReviewFindingIds: ["resolved-review"],
+      timeline: [],
+    };
+
+    const normalized = normalizeReviewMatrixOutput(
+      { ...output(), resolved_finding_ids: ["resolved-review"] },
+      reviewContext,
+    );
+
+    expect(normalized.redundantResolvedFindingIds).toBe(1);
+    expect(normalized.output.resolved_finding_ids).toEqual([]);
+    expect(normalized.output.next_state).toBe("review-passed");
+  });
+
   it("rejects unknown or simultaneously current and resolved finding ids", () => {
     expect(() =>
       normalizeReviewMatrixOutput({ ...output(), resolved_finding_ids: ["unknown"] }, context()),

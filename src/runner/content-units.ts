@@ -238,6 +238,7 @@ export function packedContextForPrompt(
     included_context_chunks: included.map(packedChunk),
     pullRequestFiles: packedPullRequestFiles(sourceContext),
     repository: sourceContext.repository,
+    resolvedReviewFindingIds: sourceContext.resolvedReviewFindingIds,
     reviewScope: sourceContext.reviewScope,
     source: packedSource(sourceContext),
     timeline: sourceContext.timeline.map(packedTimelineItem),
@@ -268,6 +269,7 @@ function packedFileBackedContextForPrompt(
     },
     generatedAt: context.generatedAt,
     repository: context.repository,
+    resolvedReviewFindingIds: context.resolvedReviewFindingIds,
     reviewScope: context.reviewScope,
     source: packedSource(context),
   };

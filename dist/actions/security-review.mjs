@@ -29542,6 +29542,43 @@ function parseStage(value) {
   throw new Error(`Unknown GitVibe action stage: ${value || "<missing>"}`);
 }
 
+// src/runner/review-finding-ids.ts
+import { createHash } from "node:crypto";
+function effectiveReviewFindingId(options) {
+  return normalizedFindingId(options.explicitFindingId) || reviewFindingMarkerId(options.rawBody) || generatedFindingId(options);
+}
+function generatedFindingId(options) {
+  const fingerprint = [options.path, options.startLine || "", options.line, options.body].map((part) => String(part).trim()).join("\0");
+  return `gv-${createHash("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
+}
+function normalizedFindingId(value) {
+  const id2 = typeof value === "string" ? value.trim() : "";
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id2) ? id2 : void 0;
+}
+function reviewFindingMarker(id2) {
+  return `<!-- git-vibe:review-finding id=${id2} -->`;
+}
+function reviewFindingMarkerId(body) {
+  const match = body.match(/<!--\s*git-vibe:review-finding\s+([^>]*)-->/);
+  const id2 = match?.[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
+  return normalizedFindingId(id2);
+}
+function reviewFindingUnanchoredMarker(id2) {
+  return `<!-- git-vibe:review-finding-unanchored id=${id2} -->`;
+}
+function reviewFindingUnanchoredMarkerIds(body) {
+  return [...body.matchAll(/<!--\s*git-vibe:review-finding-unanchored\s+([^>]*)-->/g)].flatMap(
+    (match) => {
+      const id2 = match[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
+      const normalized = normalizedFindingId(id2);
+      return normalized ? [normalized] : [];
+    }
+  );
+}
+function visibleReviewCommentBody(body) {
+  return body.replace(/<!--\s*git-vibe:review-finding(?:-(?:unanchored|update))?\s+[^>]*-->\s*/g, "").trim();
+}
+
 // src/runner/context-graphql.ts
 async function discussionContext(options) {
   const data = await options.client.graphql(
@@ -29564,7 +29601,7 @@ async function discussionContext(options) {
   });
   return { comments, discussion, labels };
 }
-async function openPullRequestReviewComments(options) {
+async function pullRequestReviewContext(options) {
   const data = await options.client.graphql(
     pullRequestReviewThreadsQuery,
     {
@@ -29583,14 +29620,33 @@ async function openPullRequestReviewComments(options) {
     pullNumber: options.pullNumber,
     token: options.token
   });
-  return threads.filter((thread) => !thread.isResolved).flatMap(
-    (thread) => thread.comments.nodes.map((comment) => ({
-      ...comment,
-      path: comment.path || thread.path,
-      reviewThreadId: thread.id,
-      reviewThreadIsOutdated: thread.isOutdated
-    }))
-  );
+  return {
+    comments: threads.filter((thread) => !thread.isResolved).flatMap(reviewThreadComments),
+    resolvedFindingIds: resolvedReviewFindingIds(threads)
+  };
+}
+function reviewThreadComments(thread) {
+  return thread.comments.nodes.map((comment) => ({
+    ...comment,
+    path: comment.path || thread.path,
+    reviewThreadId: thread.id,
+    reviewThreadIsOutdated: thread.isOutdated
+  }));
+}
+function resolvedReviewFindingIds(threads) {
+  const ids = threads.flatMap((thread) => {
+    if (!thread.isResolved) return [];
+    return thread.comments.nodes.flatMap((comment) => {
+      if (comment.replyTo?.id || !gitVibeReviewAuthor(comment.author?.login)) return [];
+      const id2 = reviewFindingMarkerId(comment.body || "");
+      return id2 ? [id2] : [];
+    });
+  });
+  return [...new Set(ids)].sort();
+}
+function gitVibeReviewAuthor(value) {
+  const login = String(value || "").trim().toLowerCase();
+  return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
 async function discussionCommentsPage(options) {
   const comments = [];
@@ -29858,7 +29914,7 @@ var pullRequestReviewThreadCommentsQuery = `
 `;
 
 // src/runner/review-scope.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 
 // src/shared/stage-result-markers.ts
 var reviewCheckpointVersion = "1";
@@ -29990,7 +30046,7 @@ async function fullPullRequestFiles(options) {
 }
 function checkpointCandidates(reviews, baseSha) {
   return reviews.flatMap((review) => {
-    if (!gitVibeReviewAuthor(review.user?.login) || stageResultStatus(review.body) !== "completed") {
+    if (!gitVibeReviewAuthor2(review.user?.login) || stageResultStatus(review.body) !== "completed") {
       return [];
     }
     const marker = parseStageResultMarker(review.body);
@@ -30032,7 +30088,7 @@ function validateExpectedSnapshot(scope, review) {
   }
 }
 function reviewScope(options) {
-  const snapshotSha = createHash("sha256").update(
+  const snapshotSha = createHash2("sha256").update(
     JSON.stringify({
       baseSha: options.baseSha,
       checkpointSha: options.checkpoint?.headSha || "",
@@ -30085,7 +30141,7 @@ function toPullRequestFile(file2) {
     status: text(file2.status) || "modified"
   };
 }
-function gitVibeReviewAuthor(value) {
+function gitVibeReviewAuthor2(value) {
   const login = text(value).toLowerCase();
   return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
@@ -30167,13 +30223,13 @@ async function buildIssueContext(options) {
     owner,
     token: options.token
   }) : void 0;
-  const reviewComments = options.type === "pull-request" ? await openPullRequestReviewComments({
+  const reviewContext = options.type === "pull-request" ? await pullRequestReviewContext({
     client: options.client,
     name: repo,
     owner,
     pullNumber: options.issueNumber,
     token: options.token
-  }) : [];
+  }) : { comments: [], resolvedFindingIds: [] };
   const reviews = options.type === "pull-request" ? await pullRequestReviews({
     client: options.client,
     name: repo,
@@ -30205,7 +30261,7 @@ async function buildIssueContext(options) {
     issue: issue2,
     issueNumber: options.issueNumber,
     relatedTimeline,
-    reviewComments,
+    reviewComments: reviewContext.comments,
     reviews: reviewBodiesForContext(reviews, pullRequestReview.scope)
   });
   return {
@@ -30223,6 +30279,7 @@ async function buildIssueContext(options) {
     generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
     pullRequestFiles: pullRequestReview.files.length ? pullRequestReview.files : void 0,
     repository: options.repository,
+    resolvedReviewFindingIds: options.type === "pull-request" ? reviewContext.resolvedFindingIds : void 0,
     reviewScope: pullRequestReview.scope,
     timeline
   };
@@ -30242,11 +30299,11 @@ function reviewBodiesForContext(reviews, scope) {
   const cutoff = scope?.checkpointSubmittedAt;
   if (!cutoff) return reviews;
   return reviews.filter((review) => {
-    if (!gitVibeReviewAuthor2(review.user?.login)) return true;
+    if (!gitVibeReviewAuthor3(review.user?.login)) return true;
     return !review.submitted_at || review.submitted_at >= cutoff;
   });
 }
-function gitVibeReviewAuthor2(value) {
+function gitVibeReviewAuthor3(value) {
   const login = String(value || "").trim().toLowerCase();
   return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
@@ -30496,14 +30553,14 @@ import { appendFileSync, readdirSync, readFileSync as readFileSync2, writeFileSy
 import { join } from "node:path";
 
 // src/shared/accepted-risk.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 var metadataStartPattern = /<!--\s*git-vibe:accepted-risk-metadata\s+([^>]*)-->/;
 var metadataBlockPattern = /\n*<!--\s*git-vibe:accepted-risk-metadata\s+[^>]*-->[\s\S]*?<!--\s*git-vibe:accepted-risk-end\s*-->\n*/g;
 function acceptedRiskArtifactContentSha(content) {
-  return createHash2("sha256").update(JSON.stringify(normalizedArtifactContent(content))).digest("hex");
+  return createHash3("sha256").update(JSON.stringify(normalizedArtifactContent(content))).digest("hex");
 }
 function acceptedRiskMetadataBodySha(body) {
-  return createHash2("sha256").update(
+  return createHash3("sha256").update(
     String(body || "").replace(metadataBlockPattern, "").trimEnd()
   ).digest("hex");
 }
@@ -32864,7 +32921,7 @@ function validateEnvName(value, path3) {
 }
 
 // src/runner/content-units.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 
 // src/runner/ignored-authors.ts
 var defaultSafetyIgnoredAuthors = ["coderabbitai", "coderabbitai[bot]"];
@@ -33153,7 +33210,7 @@ function chunkText(text2, options) {
   return chunks;
 }
 function sha256(value) {
-  return createHash3("sha256").update(value).digest("hex");
+  return createHash4("sha256").update(value).digest("hex");
 }
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "item";
@@ -54492,45 +54549,6 @@ function isRecord6(value) {
 
 // src/runner/review-matrix-output.ts
 import { createHash as createHash5 } from "node:crypto";
-
-// src/runner/review-finding-ids.ts
-import { createHash as createHash4 } from "node:crypto";
-function effectiveReviewFindingId(options) {
-  return normalizedFindingId(options.explicitFindingId) || reviewFindingMarkerId(options.rawBody) || generatedFindingId(options);
-}
-function generatedFindingId(options) {
-  const fingerprint = [options.path, options.startLine || "", options.line, options.body].map((part) => String(part).trim()).join("\0");
-  return `gv-${createHash4("sha256").update(fingerprint).digest("hex").slice(0, 16)}`;
-}
-function normalizedFindingId(value) {
-  const id2 = typeof value === "string" ? value.trim() : "";
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id2) ? id2 : void 0;
-}
-function reviewFindingMarker(id2) {
-  return `<!-- git-vibe:review-finding id=${id2} -->`;
-}
-function reviewFindingMarkerId(body) {
-  const match = body.match(/<!--\s*git-vibe:review-finding\s+([^>]*)-->/);
-  const id2 = match?.[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
-  return normalizedFindingId(id2);
-}
-function reviewFindingUnanchoredMarker(id2) {
-  return `<!-- git-vibe:review-finding-unanchored id=${id2} -->`;
-}
-function reviewFindingUnanchoredMarkerIds(body) {
-  return [...body.matchAll(/<!--\s*git-vibe:review-finding-unanchored\s+([^>]*)-->/g)].flatMap(
-    (match) => {
-      const id2 = match[1]?.match(/(?:^|\s)id=([^\s>]+)/)?.[1];
-      const normalized = normalizedFindingId(id2);
-      return normalized ? [normalized] : [];
-    }
-  );
-}
-function visibleReviewCommentBody(body) {
-  return body.replace(/<!--\s*git-vibe:review-finding(?:-(?:unanchored|update))?\s+[^>]*-->\s*/g, "").trim();
-}
-
-// src/runner/review-matrix-output.ts
 function normalizeReviewMatrixOutput(output, context) {
   return carryIncrementalFindings(normalizeDuplicateFindingIds(output), context);
 }
@@ -54564,6 +54582,7 @@ function normalizeDuplicateFindingIds(output) {
     carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
+    redundantResolvedFindingIds: 0,
     rewrittenInlineComments
   };
 }
@@ -54572,21 +54591,39 @@ function carryIncrementalFindings(normalization, context) {
   if (stringValue4(normalization.output.status) !== "completed") return normalization;
   const prior = priorFindingItems(context);
   const current = currentFindingIds(normalization.output);
-  const resolved = new Set(stringItems2(normalization.output.resolved_finding_ids));
-  for (const id2 of resolved) {
-    if (!prior.has(id2)) throw new Error(`resolved_finding_ids contains unknown finding: ${id2}.`);
+  const alreadyResolved = new Set(context.resolvedReviewFindingIds || []);
+  const resolved = /* @__PURE__ */ new Set();
+  let redundantResolvedFindingIds = 0;
+  for (const id2 of new Set(stringItems2(normalization.output.resolved_finding_ids))) {
     if (current.has(id2)) throw new Error(`Finding ${id2} cannot be current and resolved.`);
+    if (prior.has(id2)) {
+      resolved.add(id2);
+      continue;
+    }
+    if (alreadyResolved.has(id2)) {
+      redundantResolvedFindingIds += 1;
+      continue;
+    }
+    throw new Error(`resolved_finding_ids contains unknown finding: ${id2}.`);
   }
+  const resolvedNormalization = redundantResolvedFindingIds ? {
+    ...normalization,
+    output: { ...normalization.output, resolved_finding_ids: [...resolved] },
+    redundantResolvedFindingIds
+  } : normalization;
   const carried = [...prior.values()].filter(
     (finding) => !current.has(finding.id) && !resolved.has(finding.id)
   );
-  if (!carried.length) return normalization;
+  if (!carried.length) return resolvedNormalization;
   return {
-    ...normalization,
+    ...resolvedNormalization,
     carriedFindings: carried.length,
     output: {
-      ...normalization.output,
-      findings: [...stringItems2(normalization.output.findings), ...carried.map(carriedFindingText)],
+      ...resolvedNormalization.output,
+      findings: [
+        ...stringItems2(resolvedNormalization.output.findings),
+        ...carried.map(carriedFindingText)
+      ],
       next_state: "changes-required"
     }
   };
@@ -54595,7 +54632,7 @@ function priorFindingItems(context) {
   const findings = /* @__PURE__ */ new Map();
   for (const item of context.timeline) {
     if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
-    if (!gitVibeReviewAuthor3(item.author)) continue;
+    if (!gitVibeReviewAuthor4(item.author)) continue;
     const id2 = reviewFindingMarkerId(item.body);
     if (id2) {
       findings.set(id2, {
@@ -54625,7 +54662,7 @@ function checkpointReview(context) {
   const scope = context.reviewScope;
   if (!scope?.checkpointSha) return void 0;
   const reviews = context.timeline.filter((item) => {
-    if (item.kind !== "pull-request-review" || !gitVibeReviewAuthor3(item.author)) return false;
+    if (item.kind !== "pull-request-review" || !gitVibeReviewAuthor4(item.author)) return false;
     if (scope.checkpointSubmittedAt && item.createdAt !== scope.checkpointSubmittedAt) return false;
     const marker = parseStageResultMarker(item.body);
     return marker?.artifact === "pull-request" && marker.baseSha === scope.baseSha && marker.headSha === scope.checkpointSha && marker.number === context.artifact.number && marker.reviewVersion === reviewCheckpointVersion && marker.stage === "review-matrix" && stageResultStatus(item.body) === "completed";
@@ -54671,7 +54708,7 @@ function carriedFindingText(finding) {
   const marker = finding.source === "unanchored" ? ` ${reviewFindingUnanchoredMarker(finding.id)}` : "";
   return `Existing unresolved GitVibe finding ${finding.id}${detail ? `: ${detail}` : ""}${finding.url ? ` (${finding.url})` : ""}${marker}`;
 }
-function gitVibeReviewAuthor3(value) {
+function gitVibeReviewAuthor4(value) {
   const login = value.trim().toLowerCase();
   return login === "gitvibe-for-github" || login === "gitvibe-for-github[bot]";
 }
@@ -54729,7 +54766,13 @@ function compareStrings(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function unchangedOutput(output) {
-  return { carriedFindings: 0, duplicateFindingIds: 0, output, rewrittenInlineComments: 0 };
+  return {
+    carriedFindings: 0,
+    duplicateFindingIds: 0,
+    output,
+    redundantResolvedFindingIds: 0,
+    rewrittenInlineComments: 0
+  };
 }
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
@@ -54762,6 +54805,7 @@ async function stageRunResult({
     carriedFindings: 0,
     duplicateFindingIds: 0,
     output: validatedOutput,
+    redundantResolvedFindingIds: 0,
     rewrittenInlineComments: 0
   };
   const parsedOutput = normalization.output;
@@ -54774,6 +54818,11 @@ async function stageRunResult({
   if (normalization.carriedFindings > 0) {
     logger.event("output.review_findings.carried", {
       findings: normalization.carriedFindings
+    });
+  }
+  if (normalization.redundantResolvedFindingIds > 0) {
+    logger.event("output.resolved_finding_ids.normalized", {
+      already_resolved_finding_ids: normalization.redundantResolvedFindingIds
     });
   }
   const result = {

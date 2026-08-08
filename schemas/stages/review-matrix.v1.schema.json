@@ -69,7 +69,7 @@
       "type": "array",
       "maxItems": 50,
       "uniqueItems": true,
-      "description": "Prior GitVibe finding IDs proven resolved at the current review target.",
+      "description": "Currently unresolved prior GitVibe finding IDs proven resolved at the current review target. IDs in github_context.resolvedReviewFindingIds are already closed and must not be repeated.",
       "items": {
         "type": "string",
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
