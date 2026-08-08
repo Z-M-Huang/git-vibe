@@ -20,11 +20,17 @@ export interface PullRequestReviewCommentNode {
   createdAt?: string;
   databaseId?: number;
   diffHunk?: string;
+  diffSide?: "LEFT" | "RIGHT" | null;
   id: string;
+  line?: number | null;
+  originalLine?: number | null;
+  originalStartLine?: number | null;
   path?: string;
   replyTo?: { id?: string } | null;
   reviewThreadId?: string;
   reviewThreadIsOutdated?: boolean;
+  startDiffSide?: "LEFT" | "RIGHT" | null;
+  startLine?: number | null;
   updatedAt?: string;
   url?: string;
 }
@@ -39,10 +45,16 @@ interface GraphQLConnection<T> {
 
 interface PullRequestReviewThreadNode {
   comments: GraphQLConnection<PullRequestReviewCommentNode>;
+  diffSide?: "LEFT" | "RIGHT" | null;
   id: string;
   isOutdated: boolean;
   isResolved: boolean;
+  line?: number | null;
+  originalLine?: number | null;
+  originalStartLine?: number | null;
   path: string;
+  startDiffSide?: "LEFT" | "RIGHT" | null;
+  startLine?: number | null;
 }
 
 interface DiscussionQueryResult {
@@ -146,9 +158,15 @@ export async function pullRequestReviewContext(options: {
 function reviewThreadComments(thread: PullRequestReviewThreadNode): PullRequestReviewCommentNode[] {
   return thread.comments.nodes.map((comment) => ({
     ...comment,
+    diffSide: comment.diffSide || thread.diffSide,
+    line: comment.line || thread.line || thread.originalLine,
+    originalLine: comment.originalLine || thread.originalLine,
+    originalStartLine: comment.originalStartLine || thread.originalStartLine,
     path: comment.path || thread.path,
     reviewThreadId: thread.id,
     reviewThreadIsOutdated: thread.isOutdated,
+    startDiffSide: comment.startDiffSide || thread.startDiffSide,
+    startLine: comment.startLine || thread.startLine || thread.originalStartLine,
   }));
 }
 
@@ -424,9 +442,15 @@ const pullRequestReviewThreadsQuery = `
           pageInfo { hasNextPage endCursor }
           nodes {
             id
+            diffSide
             isOutdated
             isResolved
+            line
+            originalLine
+            originalStartLine
             path
+            startDiffSide
+            startLine
             comments(first: 100) {
               pageInfo { hasNextPage endCursor }
               nodes {
@@ -438,7 +462,11 @@ const pullRequestReviewThreadsQuery = `
                 url
                 authorAssociation
                 diffHunk
+                line
+                originalLine
+                originalStartLine
                 path
+                startLine
                 author { login }
                 replyTo { id }
               }
@@ -465,7 +493,11 @@ const pullRequestReviewThreadCommentsQuery = `
             url
             authorAssociation
             diffHunk
+            line
+            originalLine
+            originalStartLine
             path
+            startLine
             author { login }
             replyTo { id }
           }

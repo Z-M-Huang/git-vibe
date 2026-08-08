@@ -97,6 +97,9 @@ export async function contextForStage(
       token: options.token,
     });
   }
+  if (options.stage === "review-matrix" && options.review && !options.prNumber) {
+    throw new Error("review-matrix requires a pull request target.");
+  }
   if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
     return buildIssueContext({
       client,
@@ -500,9 +503,13 @@ function toPullRequestReviewTimelineItem(item: PullRequestReviewCommentNode): Ti
     }),
     authorAssociation: item.authorAssociation,
     databaseId: item.databaseId,
+    line: item.line || item.originalLine || undefined,
     parentId: item.replyTo?.id ? String(item.replyTo.id) : undefined,
+    path: item.path,
     reviewThreadId: item.reviewThreadId,
     reviewThreadIsOutdated: item.reviewThreadIsOutdated,
+    side: item.diffSide || undefined,
+    startLine: item.startLine || item.originalStartLine || undefined,
   };
 }
 

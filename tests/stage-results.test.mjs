@@ -81,6 +81,7 @@ describe("stageRunResult", () => {
 
   it("persists review results that repeat an already resolved finding ID", async () => {
     const directory = mkdtempSync(join(tmpdir(), "git-vibe-stage-result-"));
+    const previousRunnerTemp = process.env.RUNNER_TEMP;
     process.env.RUNNER_TEMP = directory;
     const logger = { event: vi.fn() };
 
@@ -93,6 +94,8 @@ describe("stageRunResult", () => {
         already_resolved_finding_ids: 1,
       });
     } finally {
+      if (previousRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+      else process.env.RUNNER_TEMP = previousRunnerTemp;
       rmSync(directory, { force: true, recursive: true });
     }
   });

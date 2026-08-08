@@ -26,4 +26,6 @@ COPY --from=build /app/dist/shared ./dist/shared
 
 EXPOSE 3000
 
+USER node
+
 CMD ["node", "dist/app/server.js"]

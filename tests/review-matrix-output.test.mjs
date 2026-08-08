@@ -2,6 +2,62 @@ import { describe, expect, it } from "vitest";
 import { normalizeReviewMatrixOutput } from "../src/runner/review-matrix-output.ts";
 
 /** @typedef {import("../src/shared/types.ts").ContextPacket} ContextPacket */
+/** @typedef {import("../src/shared/types.ts").JsonObject} JsonObject */
+/** @typedef {{ body: string, finding_id: string, line: number, path: string, start_line?: number }} InlineComment */
+
+describe("duplicate review finding IDs", () => {
+  it("normalizes duplicate and occupied collision IDs deterministically", () => {
+    const duplicates = [
+      inlineComment("src/z.ts", 9, "Shared finding.", "duplicate-finding"),
+      inlineComment("src/a.ts", 4, "Shared finding.", "duplicate-finding"),
+    ];
+    const baseline = normalizeReviewMatrixOutput({ ...output(), inline_comments: duplicates });
+    const occupiedCollisionId = findingIdsByPath(baseline.output)["src/z.ts"];
+    const comments = [
+      ...duplicates,
+      inlineComment("src/occupied.ts", 7, "Separate finding.", occupiedCollisionId),
+    ];
+
+    const first = normalizeReviewMatrixOutput({ ...output(), inline_comments: comments });
+    const second = normalizeReviewMatrixOutput({
+      ...output(),
+      inline_comments: [...comments].reverse(),
+    });
+    const firstIds = findingIdsByPath(first.output);
+
+    expect(first.duplicateFindingIds).toBe(1);
+    expect(first.rewrittenInlineComments).toBe(1);
+    expect(new Set(Object.values(firstIds))).toHaveProperty("size", 3);
+    expect(firstIds["src/a.ts"]).toBe("duplicate-finding");
+    expect(firstIds["src/z.ts"]).not.toBe(occupiedCollisionId);
+    expect(findingIdsByPath(second.output)).toEqual(firstIds);
+  });
+
+  it("keeps a prior anchor ID when its duplicate group shrinks", () => {
+    const duplicates = [
+      inlineComment("src/a.ts", 4, "First issue.", "duplicate-finding"),
+      inlineComment("src/z.ts", 9, "Remaining issue.", "duplicate-finding"),
+    ];
+    const initial = normalizeReviewMatrixOutput({ ...output(), inline_comments: duplicates });
+    const initialIds = findingIdsByPath(initial.output);
+    const reviewContext = contextWithPriorComments(inlineComments(initial.output));
+
+    const normalized = normalizeReviewMatrixOutput(
+      {
+        ...output(),
+        inline_comments: [inlineComment("src/z.ts", 9, "Remaining issue.", "duplicate-finding")],
+        next_state: "changes-required",
+        resolved_finding_ids: [initialIds["src/a.ts"]],
+      },
+      reviewContext,
+    );
+
+    expect(findingIdsByPath(normalized.output)["src/z.ts"]).toBe(initialIds["src/z.ts"]);
+    expect(normalized.duplicateFindingIds).toBe(0);
+    expect(normalized.rewrittenInlineComments).toBe(1);
+    expect(normalized.output.resolved_finding_ids).toEqual([initialIds["src/a.ts"]]);
+  });
+});
 
 describe("incremental review finding obligations", () => {
   it("carries unresolved findings that are outside the incremental patch", () => {
@@ -166,6 +222,43 @@ function output() {
     next_state: "review-passed",
     status: "completed",
   };
+}
+
+/** @param {string} path @param {number} line @param {string} body @param {string} findingId @returns {InlineComment} */
+function inlineComment(path, line, body, findingId) {
+  return { body, finding_id: findingId, line, path };
+}
+
+/** @param {JsonObject} value @returns {InlineComment[]} */
+function inlineComments(value) {
+  if (!Array.isArray(value.inline_comments)) throw new Error("Expected inline comments.");
+  return value.inline_comments.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Expected an inline comment object.");
+    }
+    return /** @type {InlineComment} */ (item);
+  });
+}
+
+/** @param {JsonObject} value @returns {Record<string, string>} */
+function findingIdsByPath(value) {
+  return Object.fromEntries(inlineComments(value).map((item) => [item.path, item.finding_id]));
+}
+
+/** @param {InlineComment[]} comments @returns {ContextPacket} */
+function contextWithPriorComments(comments) {
+  const value = context();
+  value.timeline = comments.map((comment, index) => ({
+    author: "gitvibe-for-github[bot]",
+    body: `<!-- git-vibe:review-finding id=${comment.finding_id} -->\n${comment.body}`,
+    createdAt: `2026-07-31T00:00:0${index}Z`,
+    id: `comment-${index}`,
+    kind: "pull-request-review-comment",
+    line: comment.line,
+    path: comment.path,
+    url: `https://github.com/example/repo/pull/12#discussion_r${index}`,
+  }));
+  return value;
 }
 
 /** @returns {ContextPacket} */

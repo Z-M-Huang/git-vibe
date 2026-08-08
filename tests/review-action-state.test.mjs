@@ -67,4 +67,34 @@ describe("GitVibe review action state", () => {
     expect(runStage).toHaveBeenCalledWith(expect.objectContaining({ review }));
     expect(runStage.mock.calls[0][0].review).not.toHaveProperty("mode");
   });
+
+  it("does not pass review state to non-review stages", async () => {
+    const runStage = vi.fn().mockResolvedValue({
+      commentBody: "",
+      parsedOutput: {},
+      schemaId: "validate.v1",
+      status: "completed",
+      summary: "Done",
+      validationErrors: [],
+    });
+
+    await expect(
+      runAction({
+        argv: ["validate"],
+        env: {
+          GITHUB_REPOSITORY: "example/repo",
+          GITVIBE_GITHUB_APP_TOKEN: "token",
+          GITVIBE_INPUT_SAFETY_DIGEST: "c".repeat(64),
+          GITVIBE_ISSUE_NUMBER: "12",
+          GITVIBE_REVIEW_BASE_SHA: "a".repeat(40),
+          GITVIBE_REVIEW_CHECKPOINT_SHA: "b".repeat(40),
+          GITVIBE_REVIEW_SNAPSHOT_SHA: "d".repeat(64),
+          GITVIBE_REVIEW_TARGET_SHA: "e".repeat(40),
+        },
+        runStage,
+      }),
+    ).resolves.toBe(0);
+
+    expect(runStage.mock.calls[0][0]).not.toHaveProperty("review");
+  });
 });

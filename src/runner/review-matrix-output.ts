@@ -15,9 +15,11 @@ import {
 import type { ContextPacket, JsonObject, TimelineItem } from "../shared/types.js";
 
 interface IndexedInlineComment {
+  anchorKey: string;
   findingId: string;
   index: number;
   item: JsonObject;
+  priorFindingId?: string;
   stableKey: string;
 }
 
@@ -40,21 +42,29 @@ export function normalizeReviewMatrixOutput(
   output: JsonObject,
   context?: ContextPacket,
 ): ReviewMatrixOutputNormalization {
-  return carryIncrementalFindings(normalizeDuplicateFindingIds(output), context);
+  return carryIncrementalFindings(normalizeDuplicateFindingIds(output, context), context);
 }
 
-function normalizeDuplicateFindingIds(output: JsonObject): ReviewMatrixOutputNormalization {
+function normalizeDuplicateFindingIds(
+  output: JsonObject,
+  context: ContextPacket | undefined,
+): ReviewMatrixOutputNormalization {
   if (!Array.isArray(output.inline_comments)) return unchangedOutput(output);
   const comments = output.inline_comments;
-  const groups = groupedInlineComments(comments);
+  const groups = groupedInlineComments(comments, priorFindingIdsByAnchor(context));
   const duplicateGroups = [...groups.entries()]
     .filter(([, entries]) => entries.length > 1)
     .sort(([left], [right]) => compareStrings(left, right));
-  if (!duplicateGroups.length) return unchangedOutput(output);
-
   const normalized = [...comments];
   const occupiedIds = new Set(groups.keys());
-  let rewrittenInlineComments = 0;
+  const rewrittenIndexes = new Set<number>();
+  for (const entries of groups.values()) {
+    for (const entry of entries) {
+      if (!entry.priorFindingId || entry.item.finding_id === entry.findingId) continue;
+      rewrittenIndexes.add(entry.index);
+      normalized[entry.index] = { ...entry.item, finding_id: entry.findingId };
+    }
+  }
   for (const [findingId, entries] of duplicateGroups) {
     const sorted = [...entries].sort(compareInlineComments);
     const occurrences = new Map<string, number>();
@@ -71,16 +81,17 @@ function normalizeDuplicateFindingIds(output: JsonObject): ReviewMatrixOutputNor
               stableKey: entry.stableKey,
             });
       occupiedIds.add(assignedId);
-      if (entry.item.finding_id !== assignedId) rewrittenInlineComments += 1;
+      if (entry.item.finding_id !== assignedId) rewrittenIndexes.add(entry.index);
       normalized[entry.index] = { ...entry.item, finding_id: assignedId };
     }
   }
+  if (!duplicateGroups.length && !rewrittenIndexes.size) return unchangedOutput(output);
   return {
     carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
     redundantResolvedFindingIds: 0,
-    rewrittenInlineComments,
+    rewrittenInlineComments: rewrittenIndexes.size,
   };
 }
 
@@ -240,11 +251,14 @@ function stringItems(value: unknown): string[] {
   return Array.isArray(value) ? value.map(stringValue).filter(Boolean) : [];
 }
 
-function groupedInlineComments(comments: unknown[]): Map<string, IndexedInlineComment[]> {
+function groupedInlineComments(
+  comments: unknown[],
+  priorFindingIds: Map<string, string>,
+): Map<string, IndexedInlineComment[]> {
   const groups = new Map<string, IndexedInlineComment[]>();
   for (const [index, value] of comments.entries()) {
     const item = recordValue(value);
-    const indexed = item ? indexedInlineComment(item, index) : undefined;
+    const indexed = item ? indexedInlineComment(item, index, priorFindingIds) : undefined;
     if (!indexed) continue;
     const entries = groups.get(indexed.findingId) || [];
     entries.push(indexed);
@@ -253,28 +267,82 @@ function groupedInlineComments(comments: unknown[]): Map<string, IndexedInlineCo
   return groups;
 }
 
-function indexedInlineComment(item: JsonObject, index: number): IndexedInlineComment | undefined {
+function indexedInlineComment(
+  item: JsonObject,
+  index: number,
+  priorFindingIds: Map<string, string>,
+): IndexedInlineComment | undefined {
   const rawBody = stringValue(item.body);
   const body = visibleReviewCommentBody(rawBody);
   const line = positiveInteger(item.line);
   const path = stringValue(item.path);
   if (!body || !line || !path) return undefined;
   const startLine = positiveInteger(item.start_line);
+  const anchorKey = inlineAnchorKey({ body, line, path, side: sideValue(item.side), startLine });
+  const priorFindingId = priorFindingIds.get(anchorKey);
   return {
-    findingId: effectiveReviewFindingId({
-      body,
-      explicitFindingId: item.finding_id,
-      line,
-      path,
-      rawBody,
-      startLine,
-    }),
+    anchorKey,
+    findingId:
+      priorFindingId ||
+      effectiveReviewFindingId({
+        body,
+        explicitFindingId: item.finding_id,
+        line,
+        path,
+        rawBody,
+        startLine,
+      }),
     index,
     item,
-    stableKey: [path, startLine || "", line, sideValue(item.side), body, stringValue(item.severity)]
-      .map(String)
-      .join("\0"),
+    priorFindingId,
+    stableKey: [anchorKey, stringValue(item.severity)].map(String).join("\0"),
   };
+}
+
+function priorFindingIdsByAnchor(context: ContextPacket | undefined): Map<string, string> {
+  const grouped = new Map<string, Set<string>>();
+  for (const item of context?.timeline || []) {
+    if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
+    if (!gitVibeReviewAuthor(item.author)) continue;
+    const findingId = reviewFindingMarkerId(item.body);
+    const body = markedReviewCommentBody(item.body);
+    const line = positiveInteger(item.line);
+    const path = stringValue(item.path);
+    if (!findingId || !body || !line || !path) continue;
+    const anchorKey = inlineAnchorKey({
+      body,
+      line,
+      path,
+      side: sideValue(item.side),
+      startLine: positiveInteger(item.startLine),
+    });
+    const findingIds = grouped.get(anchorKey) || new Set<string>();
+    findingIds.add(findingId);
+    grouped.set(anchorKey, findingIds);
+  }
+  return new Map(
+    [...grouped.entries()].flatMap(([anchorKey, findingIds]) => {
+      const [findingId] = findingIds;
+      return findingIds.size === 1 && findingId ? [[anchorKey, findingId]] : [];
+    }),
+  );
+}
+
+function inlineAnchorKey(options: {
+  body: string;
+  line: number;
+  path: string;
+  side: "LEFT" | "RIGHT";
+  startLine?: number;
+}): string {
+  return [options.path, options.startLine || "", options.line, options.side, options.body]
+    .map(String)
+    .join("\0");
+}
+
+function markedReviewCommentBody(body: string): string {
+  const marker = body.match(/<!--\s*git-vibe:review-finding\s+[^>]*-->/);
+  return marker?.index === undefined ? "" : visibleReviewCommentBody(body.slice(marker.index));
 }
 
 function collisionFindingId(options: {
@@ -298,6 +366,8 @@ function collisionFindingId(options: {
 }
 
 function compareInlineComments(left: IndexedInlineComment, right: IndexedInlineComment): number {
+  if (left.priorFindingId && !right.priorFindingId) return -1;
+  if (!left.priorFindingId && right.priorFindingId) return 1;
   return compareStrings(left.stableKey, right.stableKey) || left.index - right.index;
 }
 

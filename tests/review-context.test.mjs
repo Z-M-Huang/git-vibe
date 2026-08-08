@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildIssueContext } from "../src/runner/context.ts";
+import { buildIssueContext, contextForStage } from "../src/runner/context.ts";
 
 /** @typedef {import("../src/shared/github.ts").GitHubClient} GitHubClient */
 /** @typedef {import("../src/shared/github.ts").GitHubRequest} GitHubRequest */
@@ -9,6 +9,28 @@ const checkpointSha = "b".repeat(40);
 const targetSha = "c".repeat(40);
 
 describe("incremental review context", () => {
+  it("rejects review state without a pull request target", async () => {
+    const client = githubClient(() => {
+      throw new Error("Context loading should not start.");
+    });
+
+    await expect(
+      contextForStage(client, {
+        cwd: "/repo",
+        dryRun: false,
+        issueNumber: "4",
+        maxTurns: 1,
+        prNumber: "",
+        repository: "example/repo",
+        review: { targetSha },
+        stage: "review-matrix",
+        stageTimeoutMinutes: 1,
+        token: "token",
+      }),
+    ).rejects.toThrow("review-matrix requires a pull request target");
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
   it("omits superseded GitVibe review bodies but retains human context", async () => {
     const client = githubClient((request) => {
       if (request.path === "/repos/example/repo/issues/4") return issue();

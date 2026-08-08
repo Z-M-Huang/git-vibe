@@ -34,6 +34,7 @@ export async function securityReview(runtime: SecurityReviewRuntime = {}): Promi
     const repository = requiredEnv(env, "GITHUB_REPOSITORY");
     const cwd = env.GITHUB_WORKSPACE || runtime.cwd || process.cwd();
     const target = readTargetInputs(stage, env);
+    const reviewTargetSha = envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || undefined;
     const result = await (runtime.runStageSecurityReview || runStageSecurityReview)({
       cwd,
       dryRun: envValue(env, "GITVIBE_DRY_RUN").toLowerCase() === "true",
@@ -42,12 +43,9 @@ export async function securityReview(runtime: SecurityReviewRuntime = {}): Promi
       maxTurns: 1,
       prNumber: target.prNumber,
       repository,
-      review:
-        stage === "review-matrix"
-          ? {
-              targetSha: envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || undefined,
-            }
-          : undefined,
+      ...(stage === "review-matrix" && reviewTargetSha
+        ? { review: { targetSha: reviewTargetSha } }
+        : {}),
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
       stageTimeoutMinutes: numberEnv(env, "GITVIBE_STAGE_TIMEOUT_MINUTES", 10),
@@ -145,7 +143,7 @@ function writeOutputs(
   writeOutput(env.GITHUB_OUTPUT, "allowed", result.allowed ? "true" : "false", appendFile);
   writeOutput(env.GITHUB_OUTPUT, "summary", result.summary, appendFile);
   writeOutput(env.GITHUB_OUTPUT, "status", result.status, appendFile);
-  if (result.inputSafetyDigest) {
+  if (result.allowed && result.inputSafetyDigest) {
     writeOutput(env.GITHUB_OUTPUT, "input-safety-digest", result.inputSafetyDigest, appendFile);
   }
   if (result.reviewScope) {

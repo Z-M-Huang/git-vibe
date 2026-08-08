@@ -117,6 +117,35 @@ describe("GitVibe security review hosted auth", () => {
   });
 });
 
+describe("GitVibe blocked security review outputs", () => {
+  it("does not expose an input attestation for blocked results", async () => {
+    const appendFile = vi.fn();
+    const runStageSecurityReview = vi.fn().mockResolvedValue({
+      allowed: false,
+      inputSafetyDigest: "d".repeat(64),
+      status: "blocked",
+      summary: "Blocked.",
+    });
+
+    await expect(
+      securityReview({
+        appendFile,
+        argv: ["review-matrix"],
+        env: {
+          ...baseEnv,
+          GITHUB_OUTPUT: "/tmp/output",
+          GITVIBE_PR_NUMBER: "12",
+        },
+        runStageSecurityReview,
+      }),
+    ).resolves.toBe(0);
+
+    expect(appendFile.mock.calls.map((call) => call[1]).join("\n")).not.toContain(
+      "input-safety-digest",
+    );
+  });
+});
+
 describe("GitVibe security review action outputs", () => {
   it("writes allowed outputs without a result file", async () => {
     const appendFile = vi.fn();

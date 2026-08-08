@@ -42,7 +42,10 @@ describe("GitVibe review workflow finalizer", () => {
       GITVIBE_REVIEW_EVENT_TARGET_SHA: "${{ github.event.pull_request.head.sha || '' }}",
     });
     expect(memberJob?.env).toMatchObject({
+      GITVIBE_INPUT_SAFETY_DIGEST: "${{ needs.security-review.outputs.input-safety-digest }}",
+      GITVIBE_REVIEW_BASE_SHA: "${{ needs.security-review.outputs.base-sha }}",
       GITVIBE_REVIEW_CHECKPOINT_SHA: "${{ needs.security-review.outputs.checkpoint-sha }}",
+      GITVIBE_REVIEW_SNAPSHOT_SHA: "${{ needs.security-review.outputs.snapshot-sha }}",
       GITVIBE_REVIEW_TARGET_SHA: "${{ needs.security-review.outputs.target-sha }}",
     });
     expect(snapshotCheckout?.with).toMatchObject({

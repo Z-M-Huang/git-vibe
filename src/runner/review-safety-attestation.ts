@@ -25,7 +25,7 @@ export function securityReviewResultWithAttestation(options: {
   if (!options.context.reviewScope) return options.result;
   return {
     ...options.result,
-    inputSafetyDigest: reviewInputSafetyDigest(options),
+    ...(options.result.allowed ? { inputSafetyDigest: reviewInputSafetyDigest(options) } : {}),
     reviewScope: options.context.reviewScope,
   };
 }

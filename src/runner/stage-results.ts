@@ -37,7 +37,7 @@ export async function stageRunResult({
           rewrittenInlineComments: 0,
         };
   const parsedOutput = normalization.output;
-  if (normalization.duplicateFindingIds > 0) {
+  if (normalization.rewrittenInlineComments > 0) {
     logger.event("output.inline_comments.normalized", {
       duplicate_finding_ids: normalization.duplicateFindingIds,
       rewritten_inline_comments: normalization.rewrittenInlineComments,

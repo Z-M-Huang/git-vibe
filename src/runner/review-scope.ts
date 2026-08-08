@@ -277,7 +277,7 @@ function fileSnapshot(file: PullRequestFile): Record<string, unknown> {
 }
 
 function compareFiles(left: PullRequestFile, right: PullRequestFile): number {
-  return left.filename.localeCompare(right.filename);
+  return left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0;
 }
 
 function pullRequestFiles(files: PullRequestFileResponse[]): PullRequestFile[] {

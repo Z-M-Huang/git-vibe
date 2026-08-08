@@ -46,6 +46,7 @@ export async function runAction(runtime: ActionRuntime = {}): Promise<number> {
     const cwd = env.GITHUB_WORKSPACE || runtime.cwd || process.cwd();
     const target = readTargetInputs(stage, env);
     const maxTurns = numberEnv(env, "GITVIBE_MAX_TURNS", 90);
+    const review = reviewRunOptions(stage, env);
     const memberResultsDir = memberResultsDirFor({ cwd, env, executionMode, stage });
     const profileSelection = executionProfileSelection({
       cwd,
@@ -65,7 +66,7 @@ export async function runAction(runtime: ActionRuntime = {}): Promise<number> {
       prNumber: target.prNumber,
       profileName: profileSelection.profileName,
       repository,
-      review: reviewRunOptions(stage, env),
+      ...(review ? { review } : {}),
       roleName: profileSelection.roleName,
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
@@ -173,13 +174,14 @@ function executionModeEnv(env: NodeJS.ProcessEnv): RunnerOptions["executionMode"
 
 function reviewRunOptions(stage: Stage, env: NodeJS.ProcessEnv): ReviewRunState | undefined {
   if (stage !== "review-matrix") return undefined;
-  return {
+  const review = {
     baseSha: envValue(env, "GITVIBE_REVIEW_BASE_SHA") || undefined,
     checkpointSha: envValue(env, "GITVIBE_REVIEW_CHECKPOINT_SHA") || undefined,
     inputSafetyDigest: envValue(env, "GITVIBE_INPUT_SAFETY_DIGEST") || undefined,
     snapshotSha: envValue(env, "GITVIBE_REVIEW_SNAPSHOT_SHA") || undefined,
     targetSha: envValue(env, "GITVIBE_REVIEW_TARGET_SHA") || undefined,
   };
+  return Object.values(review).some(Boolean) ? review : undefined;
 }
 
 function executionProfileSelection(options: {

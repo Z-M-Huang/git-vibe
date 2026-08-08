@@ -15,6 +15,12 @@ describe("review input safety attestation", () => {
       context,
       result: { allowed: true, status: "allowed", summary: "Passed." },
     });
+    const changedContext = reviewContext("changed after security review");
+    const changedAttestation = securityReviewResultWithAttestation({
+      config: {},
+      context: changedContext,
+      result: { allowed: true, status: "allowed", summary: "Passed." },
+    });
     const logger = { event: vi.fn() };
     /** @type {RunnerOptions} */
     const runner = {
@@ -34,7 +40,7 @@ describe("review input safety attestation", () => {
     expect(
       reuseReviewInputSafetyAttestation({
         config: {},
-        context: reviewContext("changed after security review"),
+        context: changedContext,
         logger,
         runner,
       }),
@@ -46,8 +52,23 @@ describe("review input safety attestation", () => {
     );
     expect(logger.event).toHaveBeenCalledWith(
       "safety.input_attestation.mismatch",
-      expect.objectContaining({ expected_digest: attested.inputSafetyDigest }),
+      expect.objectContaining({
+        actual_digest: changedAttestation.inputSafetyDigest,
+        expected_digest: attested.inputSafetyDigest,
+      }),
     );
+  });
+
+  it("does not attest blocked review input", () => {
+    const context = reviewContext("blocked change");
+    const blocked = securityReviewResultWithAttestation({
+      config: {},
+      context,
+      result: { allowed: false, status: "blocked", summary: "Blocked." },
+    });
+
+    expect(blocked.inputSafetyDigest).toBeUndefined();
+    expect(blocked.reviewScope).toBe(context.reviewScope);
   });
 });
 

@@ -85,10 +85,14 @@ export interface TimelineItem {
   databaseId?: number | string;
   id: string;
   kind: string;
+  line?: number;
   parentId?: string;
+  path?: string;
   reactions?: JsonObject;
   reviewThreadId?: string;
   reviewThreadIsOutdated?: boolean;
+  side?: "LEFT" | "RIGHT";
+  startLine?: number;
   updatedAt?: string;
   url: string;
 }

@@ -10413,9 +10413,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js
+// node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -10726,9 +10726,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js
+// node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
@@ -10936,9 +10936,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js
+// node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.4/node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/.pnpm/fast-uri@3.1.5/node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -10954,7 +10954,12 @@ var require_fast_uri = __commonJS({
     }
     function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse4(baseURI, schemelessOptions), parse4(relativeURI, schemelessOptions), schemelessOptions, true);
+      const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
+      const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed) {
+        throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
+      }
+      const resolved = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
@@ -11080,6 +11085,7 @@ var require_fast_uri = __commonJS({
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
     var AUTHORITY_PREFIX = /^(?:[^#/:?]+:)?\/\/([^/?#]*)/;
+    var AUTHORITY_INTRODUCER_REGION = /^(?:[^#/:?]+:)?([/\\\t\n\r]*)/;
     function getParseError(parsed, matches) {
       if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
         return 'URI path must start with "/" when authority is present.';
@@ -11113,6 +11119,20 @@ var require_fast_uri = __commonJS({
       if (authorityMatch !== null && authorityMatch[1].indexOf("\\") !== -1) {
         parsed.error = "URI authority must not contain a literal backslash.";
         malformedAuthorityOrPort = true;
+      }
+      const introducerMatch = uri.match(AUTHORITY_INTRODUCER_REGION);
+      if (introducerMatch !== null) {
+        const region = introducerMatch[1];
+        const normalizedRegion = region.replace(/[\t\n\r]/g, "");
+        if (normalizedRegion.length >= 2) {
+          if (normalizedRegion.slice(0, 2) !== "//") {
+            parsed.error = parsed.error || "URI authority must not contain a literal backslash.";
+            malformedAuthorityOrPort = true;
+          } else if (region.length !== normalizedRegion.length) {
+            parsed.error = parsed.error || "URI authority introducer must not contain whitespace.";
+            malformedAuthorityOrPort = true;
+          }
+        }
       }
       const matches = uri.match(URI_PARSE);
       if (matches) {
@@ -29628,9 +29648,15 @@ async function pullRequestReviewContext(options) {
 function reviewThreadComments(thread) {
   return thread.comments.nodes.map((comment) => ({
     ...comment,
+    diffSide: comment.diffSide || thread.diffSide,
+    line: comment.line || thread.line || thread.originalLine,
+    originalLine: comment.originalLine || thread.originalLine,
+    originalStartLine: comment.originalStartLine || thread.originalStartLine,
     path: comment.path || thread.path,
     reviewThreadId: thread.id,
-    reviewThreadIsOutdated: thread.isOutdated
+    reviewThreadIsOutdated: thread.isOutdated,
+    startDiffSide: comment.startDiffSide || thread.startDiffSide,
+    startLine: comment.startLine || thread.startLine || thread.originalStartLine
   }));
 }
 function resolvedReviewFindingIds(threads) {
@@ -29863,9 +29889,15 @@ var pullRequestReviewThreadsQuery = `
           pageInfo { hasNextPage endCursor }
           nodes {
             id
+            diffSide
             isOutdated
             isResolved
+            line
+            originalLine
+            originalStartLine
             path
+            startDiffSide
+            startLine
             comments(first: 100) {
               pageInfo { hasNextPage endCursor }
               nodes {
@@ -29877,7 +29909,11 @@ var pullRequestReviewThreadsQuery = `
                 url
                 authorAssociation
                 diffHunk
+                line
+                originalLine
+                originalStartLine
                 path
+                startLine
                 author { login }
                 replyTo { id }
               }
@@ -29903,7 +29939,11 @@ var pullRequestReviewThreadCommentsQuery = `
             url
             authorAssociation
             diffHunk
+            line
+            originalLine
+            originalStartLine
             path
+            startLine
             author { login }
             replyTo { id }
           }
@@ -30120,7 +30160,7 @@ function fileSnapshot(file2) {
   };
 }
 function compareFiles(left, right) {
-  return left.filename.localeCompare(right.filename);
+  return left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0;
 }
 function pullRequestFiles(files) {
   return files.map(toPullRequestFile).filter((file2) => Boolean(file2));
@@ -30185,6 +30225,9 @@ async function contextForStage(client, options) {
       repository: options.repository,
       token: options.token
     });
+  }
+  if (options.stage === "review-matrix" && options.review && !options.prNumber) {
+    throw new Error("review-matrix requires a pull request target.");
   }
   if ((options.stage === "review-matrix" || options.stage === "investigate") && options.prNumber) {
     return buildIssueContext({
@@ -30497,9 +30540,13 @@ ${item.diffHunk}
     }),
     authorAssociation: item.authorAssociation,
     databaseId: item.databaseId,
+    line: item.line || item.originalLine || void 0,
     parentId: item.replyTo?.id ? String(item.replyTo.id) : void 0,
+    path: item.path,
     reviewThreadId: item.reviewThreadId,
-    reviewThreadIsOutdated: item.reviewThreadIsOutdated
+    reviewThreadIsOutdated: item.reviewThreadIsOutdated,
+    side: item.diffSide || void 0,
+    startLine: item.startLine || item.originalStartLine || void 0
   };
 }
 function toPullRequestReviewBodyTimelineItem(item) {
@@ -54550,17 +54597,23 @@ function isRecord6(value) {
 // src/runner/review-matrix-output.ts
 import { createHash as createHash5 } from "node:crypto";
 function normalizeReviewMatrixOutput(output, context) {
-  return carryIncrementalFindings(normalizeDuplicateFindingIds(output), context);
+  return carryIncrementalFindings(normalizeDuplicateFindingIds(output, context), context);
 }
-function normalizeDuplicateFindingIds(output) {
+function normalizeDuplicateFindingIds(output, context) {
   if (!Array.isArray(output.inline_comments)) return unchangedOutput(output);
   const comments = output.inline_comments;
-  const groups = groupedInlineComments(comments);
+  const groups = groupedInlineComments(comments, priorFindingIdsByAnchor(context));
   const duplicateGroups = [...groups.entries()].filter(([, entries]) => entries.length > 1).sort(([left], [right]) => compareStrings(left, right));
-  if (!duplicateGroups.length) return unchangedOutput(output);
   const normalized = [...comments];
   const occupiedIds = new Set(groups.keys());
-  let rewrittenInlineComments = 0;
+  const rewrittenIndexes = /* @__PURE__ */ new Set();
+  for (const entries of groups.values()) {
+    for (const entry of entries) {
+      if (!entry.priorFindingId || entry.item.finding_id === entry.findingId) continue;
+      rewrittenIndexes.add(entry.index);
+      normalized[entry.index] = { ...entry.item, finding_id: entry.findingId };
+    }
+  }
   for (const [findingId, entries] of duplicateGroups) {
     const sorted = [...entries].sort(compareInlineComments);
     const occurrences = /* @__PURE__ */ new Map();
@@ -54574,16 +54627,17 @@ function normalizeDuplicateFindingIds(output) {
         stableKey: entry.stableKey
       });
       occupiedIds.add(assignedId);
-      if (entry.item.finding_id !== assignedId) rewrittenInlineComments += 1;
+      if (entry.item.finding_id !== assignedId) rewrittenIndexes.add(entry.index);
       normalized[entry.index] = { ...entry.item, finding_id: assignedId };
     }
   }
+  if (!duplicateGroups.length && !rewrittenIndexes.size) return unchangedOutput(output);
   return {
     carriedFindings: 0,
     duplicateFindingIds: duplicateGroups.length,
     output: { ...output, inline_comments: normalized },
     redundantResolvedFindingIds: 0,
-    rewrittenInlineComments
+    rewrittenInlineComments: rewrittenIndexes.size
   };
 }
 function carryIncrementalFindings(normalization, context) {
@@ -54715,11 +54769,11 @@ function gitVibeReviewAuthor4(value) {
 function stringItems2(value) {
   return Array.isArray(value) ? value.map(stringValue4).filter(Boolean) : [];
 }
-function groupedInlineComments(comments) {
+function groupedInlineComments(comments, priorFindingIds) {
   const groups = /* @__PURE__ */ new Map();
   for (const [index, value] of comments.entries()) {
     const item = recordValue(value);
-    const indexed = item ? indexedInlineComment(item, index) : void 0;
+    const indexed = item ? indexedInlineComment(item, index, priorFindingIds) : void 0;
     if (!indexed) continue;
     const entries = groups.get(indexed.findingId) || [];
     entries.push(indexed);
@@ -54727,15 +54781,18 @@ function groupedInlineComments(comments) {
   }
   return groups;
 }
-function indexedInlineComment(item, index) {
+function indexedInlineComment(item, index, priorFindingIds) {
   const rawBody = stringValue4(item.body);
   const body = visibleReviewCommentBody(rawBody);
   const line = positiveInteger2(item.line);
   const path3 = stringValue4(item.path);
   if (!body || !line || !path3) return void 0;
   const startLine = positiveInteger2(item.start_line);
+  const anchorKey = inlineAnchorKey({ body, line, path: path3, side: sideValue(item.side), startLine });
+  const priorFindingId = priorFindingIds.get(anchorKey);
   return {
-    findingId: effectiveReviewFindingId({
+    anchorKey,
+    findingId: priorFindingId || effectiveReviewFindingId({
       body,
       explicitFindingId: item.finding_id,
       line,
@@ -54745,8 +54802,44 @@ function indexedInlineComment(item, index) {
     }),
     index,
     item,
-    stableKey: [path3, startLine || "", line, sideValue(item.side), body, stringValue4(item.severity)].map(String).join("\0")
+    priorFindingId,
+    stableKey: [anchorKey, stringValue4(item.severity)].map(String).join("\0")
   };
+}
+function priorFindingIdsByAnchor(context) {
+  const grouped = /* @__PURE__ */ new Map();
+  for (const item of context?.timeline || []) {
+    if (item.kind !== "pull-request-review-comment" || item.parentId) continue;
+    if (!gitVibeReviewAuthor4(item.author)) continue;
+    const findingId = reviewFindingMarkerId(item.body);
+    const body = markedReviewCommentBody(item.body);
+    const line = positiveInteger2(item.line);
+    const path3 = stringValue4(item.path);
+    if (!findingId || !body || !line || !path3) continue;
+    const anchorKey = inlineAnchorKey({
+      body,
+      line,
+      path: path3,
+      side: sideValue(item.side),
+      startLine: positiveInteger2(item.startLine)
+    });
+    const findingIds = grouped.get(anchorKey) || /* @__PURE__ */ new Set();
+    findingIds.add(findingId);
+    grouped.set(anchorKey, findingIds);
+  }
+  return new Map(
+    [...grouped.entries()].flatMap(([anchorKey, findingIds]) => {
+      const [findingId] = findingIds;
+      return findingIds.size === 1 && findingId ? [[anchorKey, findingId]] : [];
+    })
+  );
+}
+function inlineAnchorKey(options) {
+  return [options.path, options.startLine || "", options.line, options.side, options.body].map(String).join("\0");
+}
+function markedReviewCommentBody(body) {
+  const marker = body.match(/<!--\s*git-vibe:review-finding\s+[^>]*-->/);
+  return marker?.index === void 0 ? "" : visibleReviewCommentBody(body.slice(marker.index));
 }
 function collisionFindingId(options) {
   for (let attempt = 0; attempt <= options.occupiedIds.size; attempt += 1) {
@@ -54760,6 +54853,8 @@ function collisionFindingId(options) {
   throw new Error(`Unable to disambiguate review finding_id: ${options.findingId}.`);
 }
 function compareInlineComments(left, right) {
+  if (left.priorFindingId && !right.priorFindingId) return -1;
+  if (!left.priorFindingId && right.priorFindingId) return 1;
   return compareStrings(left.stableKey, right.stableKey) || left.index - right.index;
 }
 function compareStrings(left, right) {
@@ -54809,7 +54904,7 @@ async function stageRunResult({
     rewrittenInlineComments: 0
   };
   const parsedOutput = normalization.output;
-  if (normalization.duplicateFindingIds > 0) {
+  if (normalization.rewrittenInlineComments > 0) {
     logger.event("output.inline_comments.normalized", {
       duplicate_finding_ids: normalization.duplicateFindingIds,
       rewritten_inline_comments: normalization.rewrittenInlineComments
@@ -57035,7 +57130,7 @@ function securityReviewResultWithAttestation(options) {
   if (!options.context.reviewScope) return options.result;
   return {
     ...options.result,
-    inputSafetyDigest: reviewInputSafetyDigest(options),
+    ...options.result.allowed ? { inputSafetyDigest: reviewInputSafetyDigest(options) } : {},
     reviewScope: options.context.reviewScope
   };
 }
@@ -57366,6 +57461,7 @@ async function securityReview(runtime = {}) {
     const repository = requiredEnv2(env, "GITHUB_REPOSITORY");
     const cwd = env.GITHUB_WORKSPACE || runtime.cwd || process.cwd();
     const target = readTargetInputs(stage, env);
+    const reviewTargetSha = envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || void 0;
     const result = await (runtime.runStageSecurityReview || runStageSecurityReview)({
       cwd,
       dryRun: envValue(env, "GITVIBE_DRY_RUN").toLowerCase() === "true",
@@ -57374,9 +57470,7 @@ async function securityReview(runtime = {}) {
       maxTurns: 1,
       prNumber: target.prNumber,
       repository,
-      review: stage === "review-matrix" ? {
-        targetSha: envValue(env, "GITVIBE_REVIEW_EVENT_TARGET_SHA") || void 0
-      } : void 0,
+      ...stage === "review-matrix" && reviewTargetSha ? { review: { targetSha: reviewTargetSha } } : {},
       sourceComment: parseSourceComment(envValue(env, "GITVIBE_SOURCE_COMMENT")),
       stage,
       stageTimeoutMinutes: numberEnv(env, "GITVIBE_STAGE_TIMEOUT_MINUTES", 10),
@@ -57446,7 +57540,7 @@ function writeOutputs(env, result, appendFile) {
   writeOutput(env.GITHUB_OUTPUT, "allowed", result.allowed ? "true" : "false", appendFile);
   writeOutput(env.GITHUB_OUTPUT, "summary", result.summary, appendFile);
   writeOutput(env.GITHUB_OUTPUT, "status", result.status, appendFile);
-  if (result.inputSafetyDigest) {
+  if (result.allowed && result.inputSafetyDigest) {
     writeOutput(env.GITHUB_OUTPUT, "input-safety-digest", result.inputSafetyDigest, appendFile);
   }
   if (result.reviewScope) {
