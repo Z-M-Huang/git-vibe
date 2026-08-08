@@ -8,11 +8,11 @@ import { normalizeReviewMatrixOutput } from "../src/runner/review-matrix-output.
 describe("duplicate review finding IDs", () => {
   it("normalizes duplicate and occupied collision IDs deterministically", () => {
     const duplicates = [
-      inlineComment("src/z.ts", 9, "Shared finding.", "duplicate-finding"),
-      inlineComment("src/a.ts", 4, "Shared finding.", "duplicate-finding"),
+      inlineComment("src/shared.ts", 9, "Later finding.", "duplicate-finding"),
+      inlineComment("src/shared.ts", 4, "Earlier finding.", "duplicate-finding"),
     ];
     const baseline = normalizeReviewMatrixOutput({ ...output(), inline_comments: duplicates });
-    const occupiedCollisionId = findingIdsByPath(baseline.output)["src/z.ts"];
+    const occupiedCollisionId = findingIdsByAnchor(baseline.output)[anchorKey(duplicates[0])][0];
     const comments = [
       ...duplicates,
       inlineComment("src/occupied.ts", 7, "Separate finding.", occupiedCollisionId),
@@ -23,14 +23,16 @@ describe("duplicate review finding IDs", () => {
       ...output(),
       inline_comments: [...comments].reverse(),
     });
-    const firstIds = findingIdsByPath(first.output);
+    const firstIds = findingIdsByAnchor(first.output);
+    const allFirstIds = Object.values(firstIds).flat();
 
     expect(first.duplicateFindingIds).toBe(1);
     expect(first.rewrittenInlineComments).toBe(1);
-    expect(new Set(Object.values(firstIds))).toHaveProperty("size", 3);
-    expect(firstIds["src/a.ts"]).toBe("duplicate-finding");
-    expect(firstIds["src/z.ts"]).not.toBe(occupiedCollisionId);
-    expect(findingIdsByPath(second.output)).toEqual(firstIds);
+    expect(allFirstIds).toHaveLength(3);
+    expect(new Set(allFirstIds)).toHaveProperty("size", 3);
+    expect(firstIds[anchorKey(duplicates[1])]).toEqual(["duplicate-finding"]);
+    expect(firstIds[anchorKey(duplicates[0])]).not.toContain(occupiedCollisionId);
+    expect(findingIdsByAnchor(second.output)).toEqual(firstIds);
   });
 
   it("keeps a prior anchor ID when its duplicate group shrinks", () => {
@@ -39,7 +41,7 @@ describe("duplicate review finding IDs", () => {
       inlineComment("src/z.ts", 9, "Remaining issue.", "duplicate-finding"),
     ];
     const initial = normalizeReviewMatrixOutput({ ...output(), inline_comments: duplicates });
-    const initialIds = findingIdsByPath(initial.output);
+    const initialIds = findingIdsByAnchor(initial.output);
     const reviewContext = contextWithPriorComments(inlineComments(initial.output));
 
     const normalized = normalizeReviewMatrixOutput(
@@ -47,15 +49,19 @@ describe("duplicate review finding IDs", () => {
         ...output(),
         inline_comments: [inlineComment("src/z.ts", 9, "Remaining issue.", "duplicate-finding")],
         next_state: "changes-required",
-        resolved_finding_ids: [initialIds["src/a.ts"]],
+        resolved_finding_ids: [initialIds[anchorKey(duplicates[0])][0]],
       },
       reviewContext,
     );
 
-    expect(findingIdsByPath(normalized.output)["src/z.ts"]).toBe(initialIds["src/z.ts"]);
+    expect(findingIdsByAnchor(normalized.output)[anchorKey(duplicates[1])]).toEqual(
+      initialIds[anchorKey(duplicates[1])],
+    );
     expect(normalized.duplicateFindingIds).toBe(0);
     expect(normalized.rewrittenInlineComments).toBe(1);
-    expect(normalized.output.resolved_finding_ids).toEqual([initialIds["src/a.ts"]]);
+    expect(normalized.output.resolved_finding_ids).toEqual([
+      initialIds[anchorKey(duplicates[0])][0],
+    ]);
   });
 });
 
@@ -240,9 +246,24 @@ function inlineComments(value) {
   });
 }
 
-/** @param {JsonObject} value @returns {Record<string, string>} */
-function findingIdsByPath(value) {
-  return Object.fromEntries(inlineComments(value).map((item) => [item.path, item.finding_id]));
+/** @param {InlineComment} item @returns {string} */
+function anchorKey(item) {
+  return JSON.stringify([item.path, item.start_line || null, item.line, item.body]);
+}
+
+/** @param {JsonObject} value @returns {Record<string, string[]>} */
+function findingIdsByAnchor(value) {
+  /** @type {Record<string, string[]>} */
+  const findingIds = {};
+  for (const item of inlineComments(value)) {
+    const key = anchorKey(item);
+    findingIds[key] = [...(findingIds[key] || []), item.finding_id].sort();
+  }
+  return Object.fromEntries(
+    Object.entries(findingIds).sort(([left], [right]) =>
+      left === right ? 0 : left < right ? -1 : 1,
+    ),
+  );
 }
 
 /** @param {InlineComment[]} comments @returns {ContextPacket} */

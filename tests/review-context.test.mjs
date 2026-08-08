@@ -29,6 +29,7 @@ describe("incremental review context", () => {
       }),
     ).rejects.toThrow("review-matrix requires a pull request target");
     expect(client.request).not.toHaveBeenCalled();
+    expect(client.graphql).not.toHaveBeenCalled();
   });
 
   it("omits superseded GitVibe review bodies but retains human context", async () => {
